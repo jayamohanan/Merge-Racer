@@ -602,6 +602,8 @@ var CONFIG = {
                                        // the charge-rate figure. The font's
                                        // own padding adds to this on screen
 
+        // NO LONGER READ: the slot's figure now takes VILLAIN.LABEL's look, the
+        // same as the lead over the cars (see createSlots). Kept for reference.
         // The rate on each slot. Was black type on a white outline — the one
         // place in the game that ran that way round — which put it at odds with
         // the sum beside it and with every other readout. White on dark, like
@@ -849,6 +851,170 @@ var CONFIG = {
         },
     },
 
+    // ── THE RACE ─────────────────────────────────────────────────────────────
+    // Each lane is a race against the level's rival, not a chase. The three
+    // run side by side, in parallel, and read as three rounds.
+    //
+    //   START   every car lines up level, the piggy car drawn over the
+    //           rival's. After START_HOLD_MS the rival pulls ahead to where
+    //           the level's distance puts it, and its figure counts up from 0
+    //           to that distance as it goes. Then the piggy works the figure
+    //           back down.
+    //   OVERTAKE  at 0 the two are nose to nose. There is no stop: the piggy
+    //           car pulls ahead of the rival, toward the right of the screen.
+    //   FINISH  a chequered finish line comes in from the right ON THE ROAD —
+    //           it slides back with the road, as everything on the road does
+    //           (the camera is moving forward). The piggy car's nose crosses
+    //           it first (the win effects), then the rival's. The road slows
+    //           to a stop with the line behind BOTH cars, the piggy car ahead
+    //           at the right, the rival stopped behind it (OVERLAP of it
+    //           tucked behind the winner) with a brake jolt, skid marks and
+    //           dust. 1ST / 2ND badges go over the two.
+    //
+    // The player always wins: the figure only ever has to be run down.
+    RACE: {
+        ENABLED:       true,     // false: the old chase (villains, wanted cards)
+        // WHERE THEY COME LEVEL, as a share of the car area's width — in
+        // place of VILLAIN.CAR.MEET_AT. Kept left so there is road ahead for
+        // the finish. CHASE_TARGET 1: at 0 the noses are level.
+        MEET_AT:       0.30,
+        CHASE_TARGET:  1,
+
+        // THE START. Each rival DROPS in from above onto the road behind the
+        // piggy car (a new level's piggy car rolls back to the line meanwhile)
+        // and settles on its springs. A lane then waits, still, until a piggy
+        // is in its slot; LEAD_DELAY_MS after that the rival takes its head
+        // start over LEAD_MS, wind streaming off it, the figure counting up.
+        // Taken out after that, the piggy only freezes the lead.
+        DROP: {
+            MS:         380,     // the fall
+            HEIGHT:     0.5,     // falls from this share of a lane's band above the road
+            FADE_IN:    0.45,    // share of the fall spent fading in (it starts out of sight)
+            STAGGER_MS: 110,     // between one lane's drop and the next
+            SETTLE_MS:  200,     // after the last lands, before a lane can start
+            KICK:       160,     // px/s @ design the springs take on landing
+            DUST:       6,
+        },
+        LEAD_DELAY_MS: 300,
+        LEAD_MS:       1100,
+        // THE WIND off the rival as it pulls ahead: streaks from its tail and
+        // across its height, sliding back.
+        WIND: {
+            LINES:   11,
+            LEN:     [50, 140],  // px @ design
+            SPAN:    220,        // px @ design they travel back
+            SPEED:   3,          // trips per second
+            LINE_W:  4,
+            COLOR:   '#ffffff',
+            ALPHA:   0.95,
+            FADE_MS: 350,        // dying away once it has its lead
+        },
+
+        // THE FINISH
+        PASS_MS:       600,      // the piggy car pulling ahead before the line comes in
+        PASS_LEAD:     0.35,     // by then the rival's nose is this far (x the car's length) behind
+        // THE LINE rides the road: it comes in at the road's speed and slows
+        // with it (the camera braking) to a stop behind the rival's tail
+        // (VARY.LINE_BEHIND) — so both cars are fully past it. How long that
+        // takes follows from the road's speed and the distance, kept within
+        // LINE_MIN_MS..LINE_MAX_MS.
+        LINE_MIN_MS:   1600,
+        LINE_MAX_MS:   3200,
+        RUNNER_LAG_MS: 300,      // the rival stops this long after the road does
+        // THE END SCREEN, varied so the three lanes never line up: each level
+        // gives the lanes different stopping depths (front / mid / back, up
+        // to CAR_BACK x the car's length short of the right edge, give or
+        // take JITTER of that), and each its own share of the rival tucked
+        // behind the winner (OVERLAP; below 0 would be a small gap) and distance
+        // from the rival's tail back to the flag (LINE_BEHIND, x its length).
+        VARY: {
+            CAR_BACK:    0.2,
+            JITTER:      0.25,
+            OVERLAP:     [0.2, 0.4],
+            LINE_BEHIND: [0.04, 0.45],
+        },
+        EDGE_PAD:      6,        // px @ design kept clear of the screen's right edge
+        TILT:          3,        // degrees the winner noses up as it pulls away
+        BRAKE_TILT:    5,        // degrees the rival noses down braking
+        BADGE_MS:      260,      // the 1ST / 2ND badges popping up
+
+        // THE LEAD FIGURE'S COLOUR: BEHIND_COLOR while the rival leads. Once
+        // the piggy overtakes it turns AHEAD_COLOR with AHEAD_PREFIX, starting
+        // from what the last tick went past zero by and climbing smoothly at
+        // that piggy's rate (slowed with the slow motion) until the nose
+        // touches the line. There it stops at the winning margin, pops, holds
+        // HOLD_MS and fades. Display only: the lead itself is 0.
+        // It stays in ONE PLACE per lane: centred on the lane's road, ABOVE
+        // px (@ design) clear of the piggy car's roof height.
+        LEAD: {
+            ABOVE:         40,
+            BEHIND_COLOR:  '#1c1c1c',  // black, on a white outline
+            BEHIND_STROKE: '#ffffff',
+            AHEAD_COLOR:   '#2fb84f',  // green, a shade deeper to hold on white
+            AHEAD_STROKE:  '#ffffff',
+            AHEAD_PREFIX: '+',
+            FLIP_SCALE:   1.3,         // the swell as it turns green
+            FREEZE_SCALE: 1.45,        // the swell as it stops at the line
+            HOLD_MS:      1200,
+            FADE_MS:      300,
+        },
+
+        // SLOW MOTION at the line, per lane: as the line comes within AHEAD
+        // (x the car's length) of the winner's nose, that lane eases down to
+        // SCALE speed over IN_MS, crosses in slow motion, and HOLD_MS after
+        // the win goes off eases back to full speed over OUT_MS. The other
+        // lanes and the merge grid are not slowed.
+        SLOWMO: {
+            ENABLED:  true,
+            SCALE:    0.25,
+            AHEAD:    0.45,
+            IN_MS:    160,
+            HOLD_MS:  120,
+            OUT_MS:   300,
+        },
+
+        // THE FINISH LINE: a chequered post standing on the road, a chequered
+        // flag flying from its top. Sizes are shares of the car's height.
+        LINE: {
+            DEPTH:    3.85,      // behind the cars, over the road
+            POST_W:   0.16,
+            POST_H:   1.45,
+            FLAG_W:   0.72,
+            FLAG_H:   0.44,
+            CHECKS:   [5, 3],    // the flag's columns and rows
+            DARK:     '#1c1c24',
+            LIGHT:    '#ffffff',
+            WAVE_MS:  260,       // one flutter of the flag
+        },
+
+        // THE WIN, as the winner's front crosses the line.
+        WIN: {
+            DEPTH:      6,
+            CONFETTI:   30,
+            COLORS:     ['#ffd23f', '#ff5a5f', '#3ddc97', '#4cc9f0', '#ffffff', '#ff9f1c'],
+            RISE:       [90, 190],   // px @ design the confetti flies up
+            SPREAD:     [-150, 150], // …and sideways
+            FLIGHT_MS:  [450, 800],
+            RING_MS:    520,         // the burst ring and its rays
+            RAYS:       10,
+            TEXT:       'FINISH!',
+            TEXT_SIZE:  44,          // px @ design
+            TEXT_COLOR: '#ffe27a',
+            TEXT_STROKE:'#2b2013',
+            TEXT_HOLD_MS: 900,
+            SHAKE:      0.004,       // camera shake strength (0 = none)
+            SHAKE_MS:   160,
+            HOP:        7,           // px @ design the winner hops on its springs
+            DUST:       6,           // puffs at the winner's tyres
+        },
+        BADGE: {
+            DEPTH:      4.6,
+            SIZE:       24,          // px @ design
+            FIRST:      { TEXT: '1ST', FILL: '#ffd23f', INK: '#5a3b00' },
+            SECOND:     { TEXT: '2ND', FILL: '#d7dde5', INK: '#2f3742' },
+        },
+    },
+
     // ── THE CHASE'S FEEDBACK ─────────────────────────────────────────────────
     // What makes each second of driving read like a hit.
     CHASE_FX: {
@@ -990,7 +1156,7 @@ var CONFIG = {
         // grid cell.
         BAND_FRAC: 0.9,
         SLOT_FRAC: 0.62,
-        RATE_SUFFIX: '/s',       // after each slot's figure
+        RATE_SUFFIX: '',         // after each slot's figure (none: a bare number, like the lead)
     },
 
     // ── THE CAR ──────────────────────────────────────────────────────────────
@@ -1025,6 +1191,8 @@ var CONFIG = {
         LEFT_GAP:   0,
         DEPTH:      4,
 
+        // In the race (CONFIG.RACE) both cars of a lane drive the whole race,
+        // piggy or not — see GameScene._laneRacing. Otherwise:
         // THE TYRES TURN while the car's slot has a piggy driver in it. Both
         // tyres of a car share one angle. They speed up to SPIN_DEG_PER_SEC
         // when a piggy is put in and coast to a stop when it is taken out —

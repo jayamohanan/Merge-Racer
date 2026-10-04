@@ -234,6 +234,8 @@ class GameScene extends Phaser.Scene {
         this.caughtCards       = [];     // per lane: its CAUGHT card / badge
         this.perps             = [];     // per lane: the caught villain, cuffed, in front of the cars
         this._briefing         = false;  // the intro's cards are up: no chasing yet
+        this.finishLines       = [];     // per lane: its finish line, once it has won
+        this.raceBadges        = [];     // per lane: its 1ST / 2ND badges
 
         // Layout state for responsive design
         this.isPortrait         = true;  // Detected in create()
@@ -623,6 +625,7 @@ class GameScene extends Phaser.Scene {
         if (this.isWatchingAd)    return 'an ad is playing';
         if (this._levelTurning)   return 'a level turn';
         if (this._briefing)       return 'the wanted cards';
+        if (this.lanes && this.lanes.some((l) => l.finishing)) return 'a finish';
         if ((this._coinFlights || 0) > 0) return 'coins in flight';
         const t = this.tweens.getTweens().filter((tw) => !tw.isInfinite).length;
         return t ? `${t} tween(s) running` : null;
@@ -802,7 +805,7 @@ class GameScene extends Phaser.Scene {
         if (sv.lanes) {
             this.lanes = this._levelLanes(this.level).map((l, i) => {
                 const k = sv.lanes[i];
-                return Object.assign(l, { left: Math.min(k.left, l.total), caught: k.caught });
+                return Object.assign(l, { left: Math.min(k.left, l.total), caught: k.caught, surged: true, dropped: true });
             });
         }
         this.highestBatteryLevel = sv.highest;
@@ -1092,12 +1095,14 @@ class GameScene extends Phaser.Scene {
         const B     = L.partB;
         const ssz   = L.slotSize;
 
-        const SR = P.SLOT_RATE || {};
+        // THE SAME LOOK AS THE LEAD FIGURE over the cars (VILLAIN.LABEL), so
+        // the piggy's figure and the lead it runs down read as one kind of number.
+        const LB = (CONFIG.VILLAIN || {}).LABEL || {};
         const style = {
-            fontSize: Math.max(12, Math.round(22 * scale)) + 'px',
+            fontSize: Math.max(10, Math.round(v(LB.SIZE, 30) * scale)) + 'px',
             fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT,
-            color: SR.COLOR || '#ffffff', stroke: SR.STROKE || '#3a2a00',
-            strokeThickness: Math.round(v(SR.STROKE_W, 3) * scale),
+            color: LB.COLOR || '#ffffff', stroke: LB.STROKE || '#2b2013',
+            strokeThickness: Math.round(v(LB.STROKE_W, 5) * scale),
         };
         // The label's REAL height, so a slot and its label are centred in their
         // band as one block rather than the slot alone.
@@ -1245,7 +1250,10 @@ class GameScene extends Phaser.Scene {
                      ...this.villains.map((en, i) => [en && en.isCar ? en : null, i])];
         all.forEach(([car, i]) => {
             if (!car || !car.scene) return;
-            const want = this._laneDriving(i) ? top : 0;
+            // Once a finish line is on the road, as fast as it (and the road) moves.
+            const ln = this.finishLines[i];
+            const want = ln && ln.lockRoad ? top * (ln.speedK || 0)
+                       : this._laneDriving(i) || this._laneRacing(i) || car.revving ? top : 0;
             car.wheelSpeed += (want - car.wheelSpeed) * ease;
             if (!want && car.wheelSpeed < 1) car.wheelSpeed = 0;
             if (!car.wheelSpeed) return;
@@ -1261,14 +1269,30 @@ class GameScene extends Phaser.Scene {
     // levelData.js.
     _levelLanes(level) {
         const d = levelDistancesFor(level), pay = levelPayoutsFor(level);
-        return d.map((v, i) => ({ total: v, left: v, payout: pay[i], caught: false }));
+        // `caught` is "overtaken" in the race: the lane has been won. `surged`:
+        // the rival has pulled ahead to its distance (the start is over).
+        // `finishing`: the win is playing out.
+        // `dropped`: the rival has landed on the road (_raceIntro).
+        // `leading`: it is taking its head start (_startLead).
+        return d.map((v, i) => ({ total: v, left: v, payout: pay[i], caught: false,
+                                  surged: false, finishing: false, dropped: false, leading: false }));
     }
 
     // Lane i's car is being driven: a piggy in its slot, and a villain still
     // to catch.
     _laneDriving(i) {
         const lane = this.lanes && this.lanes[i];
-        return !!(this.chargingSlots[i] && lane && !lane.caught && !this._levelTurning && !this._briefing);
+        return !!(this.chargingSlots[i] && lane && !lane.caught && !this._levelTurning && !this._briefing &&
+                  (lane.surged || !this._raceOn()));
+    }
+
+    // Lane i's race is under way: the rival has pulled ahead and not yet been
+    // beaten. Both cars drive on — tyres turning, road running — whether or
+    // not a piggy is in the slot. Only a piggy closes the lead (chargeCycle);
+    // without one the two just race on, level-pegging, for as long as it takes.
+    _laneRacing(i) {
+        const lane = this.lanes && this.lanes[i];
+        return !!(this._raceOn() && lane && lane.surged && !lane.caught && !this._levelTurning && !this._briefing);
     }
 
     // THE LEVEL'S VILLAINS, one per lane — the level's villain, three times —
@@ -1283,6 +1307,7 @@ class GameScene extends Phaser.Scene {
         for (const o of [...this.villains, ...this.laneLabels, this.gapLines, this.roadGfx]) {
             if (o && o.scene) { this.tweens.killTweensOf(o); o.destroy(); }
         }
+        this._clearRace();
         this.villains = []; this.laneLabels = [];
         this._clearWantedCards();
         this.gapLines = this.roadGfx = null;
@@ -1304,7 +1329,10 @@ class GameScene extends Phaser.Scene {
             // THE GETAWAY CAR, on the road line where the villain would stand.
             if (this._chaseCars()) {
                 const en = this._makeGetawayCar(i, ground, key);
-                if (enter && en) {
+                // IN THE RACE a rival not yet dropped in is out of sight (_raceIntro).
+                if (en && this._raceOn()) {
+                    if (!lane.dropped) en.setVisible(false);
+                } else if (enter && en) {
                     en.setAlpha(0).setScale(en.baseScale * 0.85);
                     this.tweens.add({ targets: en, alpha: 1, scale: en.baseScale,
                         duration: v(V.ENTER_MS, 400), delay: i * 90, ease: 'Back.easeOut' });
@@ -1351,10 +1379,11 @@ class GameScene extends Phaser.Scene {
                 // come level around MEET_AT of the car area, not at its end.
                 if (vl && vl.isCar) {
                     const K = V.CAR || {};
-                    const tgt = v(K.CHASE_TARGET, 0.85);
+                    const R = this._raceOn() ? CONFIG.RACE || {} : {};
+                    const tgt = v(R.CHASE_TARGET !== undefined ? R.CHASE_TARGET : K.CHASE_TARGET, 0.85);
                     const k = -vl.carW / 2 + tgt * vl.carW - car.carW / 2;   // piggy centre − getaway centre
                     const CA = this.carArea;
-                    let e1 = Math.min(vl.homeX, CA.x + CA.width * v(K.MEET_AT, 0.55) - k / 2);
+                    let e1 = Math.min(vl.homeX, CA.x + CA.width * v(R.MEET_AT !== undefined ? R.MEET_AT : K.MEET_AT, 0.55) - k / 2);
                     if (e1 + k < car.homeX) e1 = car.homeX - k;
                     car.endX = e1 + k;
                     vl.endX = e1;
@@ -1372,7 +1401,7 @@ class GameScene extends Phaser.Scene {
                 // The getaway car where its lane's progress puts it — or
                 // where it was blocked.
                 const en = this.villains[i];
-                if (en && en.isCar && !enter) { en.x = en.targetX = this._enemyXFor(i); en.driveV = 0; }
+                if (en && en.isCar && (!enter || this._raceOn())) { en.x = en.targetX = this._enemyXFor(i); en.driveV = 0; }
             }
 
             // THE DISTANCE, on the gap line — placed every frame (_drawGapLines).
@@ -1386,7 +1415,7 @@ class GameScene extends Phaser.Scene {
 
             // A CAUGHT LANE keeps its badge — so a rebuild (a relayout, a
             // resumed save) shows it as it was.
-            if (lane.caught) this._placeBadge(i);
+            if (lane.caught) { if (this._raceOn()) this._raceFinal(i); else this._placeBadge(i); }
         });
         this.gapLines = this.add.graphics().setDepth(v(V.DEPTH, 4) + 0.1);
         this._drawGapLines();
@@ -1457,7 +1486,17 @@ class GameScene extends Phaser.Scene {
             const k = car && car.scene ? Math.max(0, (car.wheelSpeed || 0) / top) : 0;
             // HOW FAR THE ROAD HAS SLID — kept whole, since the marks and the
             // bumps repeat at different spacings and each takes its own share.
-            this.roadOffsets[i] += v(R.SPEED, 420) * sc * k * delta / 1000;
+            // A FINISH LINE ON THE ROAD carries it: the road slides exactly as
+            // far as the line does, so the two move as one (_finishLane).
+            const ln = this.finishLines[i];
+            if (ln && ln.scene && ln.lockRoad) {
+                const dx = Math.max(0, ln.lastX - ln.x);
+                ln.lastX = ln.x;
+                this.roadOffsets[i] += dx;
+                ln.speedK = delta > 0 ? Math.min(1, dx / (delta / 1000) / ln.v0) : 0;
+            } else {
+                this.roadOffsets[i] += v(R.SPEED, 420) * sc * k * delta / 1000;
+            }
             const off = this.roadOffsets[i] % period;
             const bumpP = this._bumpEvery(), bumpOff = this.roadOffsets[i] % bumpP;
 
@@ -1594,7 +1633,10 @@ class GameScene extends Phaser.Scene {
         const car = this.cars[i], lane = this.lanes && this.lanes[i];
         if (!car) return 0;
         // CAUGHT IN A CHASE: pulled ahead of the getaway car (_blockGetaway).
-        if (lane && lane.caught && this._chaseCars()) return this._blockedCarX(i);
+        if (lane && lane.caught && this._chaseCars()) {
+            const g = this._raceOn() ? this._raceGeom(i) : null;
+            return this._raceOn() ? (g ? g.carStop : car.endX) : this._blockedCarX(i);
+        }
         const done = lane && lane.total > 0 ? 1 - lane.left / lane.total : 0;
         return car.homeX + (car.endX - car.homeX) * Math.max(0, Math.min(1, done));
     }
@@ -1623,7 +1665,12 @@ class GameScene extends Phaser.Scene {
     _enemyXFor(i) {
         const en = this.villains[i], lane = this.lanes && this.lanes[i];
         if (!en || !en.isCar) return en ? en.x : 0;
-        if (lane && lane.caught) return this._blockedX(i);
+        if (lane && lane.caught) {
+            const g = this._raceOn() ? this._raceGeom(i) : null;
+            return this._raceOn() ? (g ? g.enemyStop : en.x) : this._blockedX(i);
+        }
+        // LINED UP with the piggy car, until the rival has pulled ahead.
+        if (this._raceOn() && lane && !lane.surged && this.cars[i]) return this.cars[i].homeX;
         const done = lane && lane.total > 0 ? 1 - lane.left / lane.total : 0;
         const end = en.endX !== undefined ? en.endX : en.homeX;
         return en.homeX + (end - en.homeX) * Math.max(0, Math.min(1, done));
@@ -1663,8 +1710,17 @@ class GameScene extends Phaser.Scene {
             // two cars, over the taller of them (and the villain's head, if
             // it pokes above the roof), and never hides for want of room —
             // and stays up a moment at 0 once caught (LABEL.ZERO_MS).
-            if (G.ENABLED === false && lane && car && vl && vl.visible && (!lane.caught || this._showingZero(lane))) {
+            if (G.ENABLED === false && lane && car && vl && vl.visible &&
+                (!lane.caught || this._showingZero(lane) || (lane.ahead && !lane.ahead.gone))) {
                 const ground = p.slotY + p.slotSize / 2;
+                // IN THE RACE it stays put: centred on the lane's road and
+                // ABOVE px clear of the piggy car's roof height, wherever the
+                // cars are (RACE.LEAD).
+                if (this._raceOn() && this.carArea) {
+                    const RL = (CONFIG.RACE || {}).LEAD || {}, CA = this.carArea;
+                    if (t) t.setPosition(CA.x + CA.width / 2, ground - car.carH - v(RL.ABOVE, 40) * sc - t.height / 2).setVisible(true);
+                    return;
+                }
                 let top = Math.min(ground - car.carH, ground - vl.displayHeight);
                 if (vl.face && vl.face.visible) top = Math.min(top, this._faceAt(vl).y - (vl.faceH || 0) * vl.scaleY / 2);
                 if (t) t.setPosition((car.x + vl.x) / 2, top - v((V.LABEL || {}).ABOVE, 14) * sc - t.height / 2).setVisible(true);
@@ -1715,8 +1771,36 @@ class GameScene extends Phaser.Scene {
         const t = this.laneLabels[i], lane = this.lanes && this.lanes[i];
         if (!t || !t.scene || !lane) return;
         const LB = (CONFIG.VILLAIN || {}).LABEL || {};
-        t.setText(this._bigNum(Math.ceil(lane.left)) + (LB.SUFFIX !== undefined ? LB.SUFFIX : ' m'))
+        const suffix = LB.SUFFIX !== undefined ? LB.SUFFIX : ' m';
+        // IN THE RACE the figure is RED while the rival leads and GREEN, with
+        // a +, once the piggy is ahead (_finishLane / _raceTick) — display
+        // only, the lead itself is 0 by then. See RACE.LEAD.
+        if (this._raceOn()) {
+            const RL = (CONFIG.RACE || {}).LEAD || {};
+            const ah = lane.ahead;
+            if (ah) {
+                this._labelColor(t, RL.AHEAD_COLOR || '#2fb84f', RL.AHEAD_STROKE || '#ffffff');
+                t.setText((RL.AHEAD_PREFIX !== undefined ? RL.AHEAD_PREFIX : '+') + this._bigNum(Math.floor(ah.v)) + suffix)
+                    .setVisible(!ah.gone);
+                return;
+            }
+            this._labelColor(t, RL.BEHIND_COLOR || '#1c1c1c', RL.BEHIND_STROKE || '#ffffff');
+        }
+        // The figure counts up from 0 while the rival pulls ahead (_raceIntro).
+        const n = lane.shown !== undefined ? lane.shown : this._raceOn() && !lane.surged ? 0 : lane.left;
+        t.setText(this._bigNum(Math.ceil(n)) + suffix)
             .setVisible(!lane.caught || this._showingZero(lane));
+    }
+
+    // A label's colour and outline, set only when they change (a restyle
+    // redraws the text).
+    _labelColor(t, col, stroke) {
+        if (t._col !== col) { t._col = col; t.setColor(col); }
+        if (stroke && t._stroke !== stroke) {
+            t._stroke = stroke;
+            const LB = (CONFIG.VILLAIN || {}).LABEL || {};
+            t.setStroke(stroke, Math.round((LB.STROKE_W !== undefined ? LB.STROKE_W : 5) * this.layoutConfig.platformScale));
+        }
     }
 
     // CAUGHT. The villain goes (a fade for now — the kill animation comes
@@ -1737,6 +1821,15 @@ class GameScene extends Phaser.Scene {
         const at = img && img.scene
             ? { x: img.x, y: img.y - img.displayHeight / 2 }
             : { x: this.villainArea.x + this.villainArea.width / 2, y: this.platforms[i].slotY };
+        // THE RACE: the winner drives on past the rival to the finish line.
+        if (this._raceOn() && img && img.scene && img.isCar) {
+            this._finishLane(i);
+            if (this.lanes.every((l) => l.caught)) {
+                this._levelTurning = true;
+                this._turnWhenDone();
+            }
+            return;
+        }
         // A GETAWAY CAR is cut off and blocked; a villain on foot just goes.
         let blockMs = 0;
         if (img && img.scene && img.isCar) {
@@ -1919,6 +2012,7 @@ class GameScene extends Phaser.Scene {
     // shrinks into it — then the chase starts. A tap anywhere ends it early.
     _showWanted() {
         const W = CONFIG.WANTED || {}, I = W.INTRO || {}, v = (x, d) => (x !== undefined ? x : d);
+        if (this._raceOn()) { this._raceIntro(); return; }
         if (W.ENABLED === false || !this._levelFresh()) return;
         this._clearWantedCards();
         this._briefing = true;
@@ -2301,6 +2395,456 @@ class GameScene extends Phaser.Scene {
                 y: c.y - Phaser.Math.Between(6, 18) * sc, scale: 2.4, alpha: 0,
                 duration: Phaser.Math.Between(420, 620), ease: 'Cubic.easeOut', onComplete: () => c.destroy() });
         }
+    }
+
+    // ================================================================
+    // THE RACE — see CONFIG.RACE
+    // ================================================================
+    // Each lane races the level's rival: lined up, the rival pulls ahead to
+    // the level's distance, the piggy runs the figure down, overtakes, and
+    // crosses a finish line first. `lane.caught` is "won".
+    _raceOn() {
+        return (CONFIG.RACE || {}).ENABLED !== false && this._chaseCars();
+    }
+
+    // WHERE LANE i's RACE ENDS, from its cars: the winner's stop (as far
+    // right as the screen allows), the rival's stop tucked behind it, and
+    // where the finish line comes to rest — behind the rival's tail, so both
+    // cars are fully past it. Null with no cars.
+    _raceGeom(i) {
+        const R = CONFIG.RACE || {}, L = R.LINE || {}, v = (x, d) => (x !== undefined ? x : d);
+        const car = this.cars[i], en = this.villains[i], CA = this.carArea;
+        if (!car || !en || !en.isCar || !CA) return null;
+        const sc = this.layoutConfig.platformScale;
+        const W = car.carW, eW = en.carW;
+        const right = CA.x + CA.width - v(R.EDGE_PAD, 6) * sc;
+        // NO TWO LANES END ALIKE (RACE.VARY): each level deals the three lanes
+        // a different stopping depth — one at the front, one mid, one back —
+        // plus a little jitter, and its own gap to the rival and flag spot.
+        // Hashed from lane and level, so a rebuild puts everything back where
+        // it was.
+        const VR = R.VARY || {};
+        const h = (salt) => this._cellHash(i + 1, Math.max(1, this.level), salt);
+        const lerp = (r, t, d) => { const a = r || d; return a[0] + (a[1] - a[0]) * t; };
+        const perms = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+        const rank = perms[Math.floor(this._cellHash(0, Math.max(1, this.level), 41) * 6) % 6][i] || 0;
+        const back = (rank / 2 + (h(42) - 0.5) * v(VR.JITTER, 0.16)) * v(VR.CAR_BACK, 0.45) * W;
+        const carStop = Math.max(right - W / 2 - Math.max(0, back), car.endX + W / 2);
+        // The rival's nose is OVERLAP of its length inside the winner's tail
+        // (below 0: a small gap behind it instead).
+        const ov = lerp(VR.OVERLAP, h(43), [0.3, 0.3]);
+        const enemyStop = carStop - W / 2 + ov * eW - eW / 2;
+        let stop = carStop, eStop = enemyStop;
+        let lineX = eStop - eW / 2 - lerp(VR.LINE_BEHIND, h(44), [0.25, 0.25]) * eW;
+        // NO ROOM for the flag (it flies left off the post, and must stay in
+        // the car area): the whole group moves forward as far as the screen
+        // allows rather than the flag cutting into the rival's tail. Only on
+        // a screen too narrow even for that does the flag sit at the limit.
+        const minLine = CA.x + car.carH * (v(L.FLAG_W, 0.72) + v(L.POST_W, 0.16));
+        if (lineX < minLine) {
+            const shift = Math.min(minLine - lineX, Math.max(0, right - W / 2 - stop));
+            stop += shift; eStop += shift; lineX = Math.max(minLine, lineX + shift);
+        }
+        return { carStop: stop, enemyStop: eStop, lineX, ov };
+    }
+
+    // Every finish line and badge gone.
+    _clearRace() {
+        const kill = (o) => {
+            if (!o || !o.scene) return;
+            this.tweens.killTweensOf(o);
+            if (o.flag) this.tweens.killTweensOf(o.flag);
+            o.destroy();
+        };
+        this.finishLines.forEach(kill);
+        this.raceBadges.forEach((pair) => (pair || []).forEach(kill));
+        this.finishLines = []; this.raceBadges = [];
+    }
+
+    // THE START of a level: each rival drops in from above onto the road
+    // behind the piggy car, lined up with it (_enemyXFor), and settles on its
+    // springs. Nothing drives yet. A lane then starts the moment it has a
+    // piggy in its slot (_raceTick -> _startLead).
+    _raceIntro() {
+        const R = CONFIG.RACE || {}, D = R.DROP || {}, v = (x, d) => (x !== undefined ? x : d);
+        if (!this.lanes) return;
+        const stag = v(D.STAGGER_MS, 110), ms = v(D.MS, 380);
+        let end = -1, k = 0;
+        this.lanes.forEach((lane, i) => {
+            if (lane.dropped || lane.surged) return;
+            const en = this.villains[i];
+            if (!en || !en.scene || !en.isCar) { lane.dropped = true; return; }
+            const delay = k++ * stag;
+            this._dropRival(i, delay);
+            end = Math.max(end, delay + ms);
+        });
+        if (end < 0) return;
+        this._briefing = true;
+        this.time.delayedCall(end + v(D.SETTLE_MS, 200), () => { this._briefing = false; });
+    }
+
+    // LANE i's RIVAL FALLS onto its road: from HEIGHT of a lane's band above
+    // it — kept low so it never shows over the lane above — fading in over
+    // the first FADE_IN of the fall, speeding up as it falls; the springs take
+    // the landing and dust flies.
+    _dropRival(i, delay) {
+        const R = CONFIG.RACE || {}, D = R.DROP || {}, v = (x, d) => (x !== undefined ? x : d);
+        const lane = this.lanes[i], en = this.villains[i], p = this.platforms[i];
+        const sc = this.layoutConfig.platformScale;
+        const ground = p.slotY + p.slotSize / 2;
+        en.setVisible(true).setAlpha(0);
+        en.y = ground - this.layoutConfig.slotBandH * v(D.HEIGHT, 0.5);
+        this.tweens.add({ targets: en, alpha: 1, delay, duration: v(D.MS, 380) * v(D.FADE_IN, 0.45) });
+        this.tweens.add({ targets: en, y: ground, delay, duration: v(D.MS, 380), ease: 'Quad.easeIn',
+            onComplete: () => {
+                lane.dropped = true;
+                for (const e of en.susp.ends) e.v -= v(D.KICK, 160) * sc;
+                this._dust(en, -1, v(D.DUST, 6));
+            } });
+    }
+
+    // LANE i's RIVAL TAKES ITS HEAD START — the lane's piggy has gone in.
+    // It pulls ahead to where the lead puts it, wind streaming off it, and
+    // the figure counts up from 0 as it goes. Then the race is on; taking
+    // the piggy out after this only freezes the lead (_laneRacing).
+    _startLead(i) {
+        const R = CONFIG.RACE || {}, v = (x, d) => (x !== undefined ? x : d);
+        const lane = this.lanes[i], car = this.cars[i], en = this.villains[i];
+        if (!car || !car.scene || !en || !en.scene) { lane.surged = true; return; }
+        lane.leading = true;
+        const delay = v(R.LEAD_DELAY_MS, 300), lead = v(R.LEAD_MS, 1100);
+        car.revving = en.revving = true;
+        lane.shown = 0;
+        this._setLaneLabel(i);
+        en.wind = 0;
+        this.tweens.add({ targets: en, wind: 1, delay, duration: 150 });
+        this.tweens.add({ targets: en, x: en.homeX, delay, duration: lead, ease: 'Cubic.easeOut',
+            onStart: () => this._dust(en, -1, 4) });
+        this.tweens.addCounter({ from: 0, to: lane.total, delay, duration: lead, ease: 'Cubic.easeOut',
+            onUpdate: (tw) => { lane.shown = tw.getValue(); this._setLaneLabel(i); },
+            onComplete: () => {
+                lane.shown = undefined;
+                lane.surged = true;
+                lane.leading = false;
+                car.revving = en.revving = false;
+                en.x = en.targetX = this._enemyXFor(i);
+                this._setLaneLabel(i);
+                this.tweens.add({ targets: en, wind: 0, duration: v((R.WIND || {}).FADE_MS, 350) });
+            } });
+    }
+
+    // THE WIN: lane i's figure has reached 0 — the piggy car is level with
+    // the rival and does not stop. It pulls ahead toward the right of the
+    // screen; then the finish line comes in from the right ON THE ROAD,
+    // sliding back with it at the road's speed and slowing as the road does
+    // (the camera braking), to rest behind both cars. The winner's nose
+    // crosses it first (_winFx, from _raceTick), then the rival's; the rival
+    // brakes in behind the winner. Returns how long it all takes, ms.
+    _finishLane(i) {
+        const R = CONFIG.RACE || {}, v = (x, d) => (x !== undefined ? x : d);
+        const lane = this.lanes[i], car = this.cars[i], en = this.villains[i], g = this._raceGeom(i);
+        const CA = this.carArea, sc = this.layoutConfig.platformScale;
+        if (!g || !car || !car.scene || !en || !en.scene) {
+            this.animateCoinReward(CA.x + CA.width / 2, this.platforms[i].slotY, lane.payout);
+            return 0;
+        }
+        lane.finishing = true;
+        // THE FIGURE TURNS GREEN: "+" what the last tick went past zero by,
+        // counting up at the piggy's rate until the nose touches the line
+        // (_raceTick). Display only — the lead is 0.
+        lane.ahead = { v: lane.over || 0, rate: lane.overRate || 0, frozen: false, gone: false };
+        this._setLaneLabel(i);
+        this._bumpLabel(i, v((R.LEAD || {}).FLIP_SCALE, 1.3));
+        this.tweens.killTweensOf(car);
+        this.tweens.killTweensOf(en);
+        car.driveV = en.driveV = 0;
+        car.revving = en.revving = true;
+
+        // THE LINE, waiting beyond the right edge. Once the winner is ahead
+        // (PASS_MS) it rides in at the road's full speed and eases to rest
+        // (Quad out: it starts at 2D/T — the road's speed — and slows to 0).
+        // From then on the road is locked to it (_drawRoads), and the tyres
+        // turn as fast as it moves (_spinWheels).
+        const pass = v(R.PASS_MS, 600);
+        const line = this._makeFinishLine(i, 0);
+        const x0 = CA.x + CA.width + line.flagW + line.postW * 2;
+        line.setX(x0);
+        line.v0 = Math.max(1, v((CONFIG.ROAD || {}).SPEED, 420) * sc);
+        line.lastX = x0;
+        this.finishLines[i] = line;
+        const T = Math.max(v(R.LINE_MIN_MS, 1600), Math.min(v(R.LINE_MAX_MS, 3200),
+            2 * Math.max(1, x0 - g.lineX) / line.v0 * 1000));
+        // Every tween of the finish is kept on the line, so the slow motion
+        // (_raceTick) can slow this lane's race alone.
+        const tw = line.tws = [];
+        tw.push(this.tweens.add({ targets: line, x: g.lineX, delay: pass, duration: T, ease: 'Quad.easeOut',
+            onStart: () => { line.lockRoad = true; line.lastX = line.x; } }));
+
+        // THE WINNER pulls away to the right and rolls to a stop as the road does.
+        tw.push(this.tweens.add({ targets: car, x: g.carStop, duration: pass + T, ease: 'Quad.easeOut',
+            onComplete: () => { car.revving = false; } }));
+        tw.push(this.tweens.add({ targets: car, angle: -v(R.TILT, 3), duration: 260, yoyo: true, ease: 'Sine.easeInOut' }));
+
+        // THE RUNNER-UP is passed: by the end of PASS_MS its nose is at least
+        // PASS_LEAD (x the winner's length) behind the winner's — falling
+        // back to there if it is ahead (a last tick that closed a big lead
+        // at once leaves it mid-road), holding if already behind. Then it
+        // follows and brakes in behind.
+        const W = car.carW, eW = en.carW;
+        const u = pass / (pass + T);
+        const frontAtPass = car.x + (g.carStop - car.x) * (1 - (1 - u) * (1 - u)) + W / 2;   // Quad out
+        const ePass = Math.min(en.x, frontAtPass - v(R.PASS_LEAD, 0.35) * W - eW / 2);
+        tw.push(this.tweens.add({ targets: en, x: ePass, duration: pass, ease: 'Sine.easeOut' }));
+        const lag = v(R.RUNNER_LAG_MS, 300);
+        tw.push(this.tweens.add({ targets: en, x: g.enemyStop, delay: pass, duration: T + lag, ease: 'Sine.easeInOut',
+            onComplete: () => {
+                en.revving = false;
+                this.tweens.add({ targets: en, angle: v(R.BRAKE_TILT, 5), duration: 140, yoyo: true, ease: 'Quad.easeOut' });
+                this._skid(en);
+                this._dust(en, -1, 5);
+                const ms = this._raceBadges(i, true);
+                this.time.delayedCall(ms, () => { lane.finishing = false; this._turnWhenDone(); });
+            } }));
+        return pass + T + lag + v(R.BADGE_MS, 260) + 140;
+    }
+
+    // Each frame, for each finish line riding in:
+    //   THE WIN the moment the line reaches the winner's nose (_winFx).
+    //   SLOW MOTION just before it (RACE.SLOWMO): as the line comes within
+    //   AHEAD of the nose, that lane's finish eases down to SCALE speed; it
+    //   crosses in slow motion, the win goes off, and HOLD_MS later the lane
+    //   eases back to full speed. Only that lane's tweens are slowed — the
+    //   road and tyres follow the line, so they slow with it — and the other
+    //   lanes and the merge grid run on. Eased on real time (`delta`).
+    _raceTick(time, delta) {
+        const S = (CONFIG.RACE || {}).SLOWMO || {}, v = (x, d) => (x !== undefined ? x : d);
+        const scale = Math.max(0.05, Math.min(1, v(S.SCALE, 0.25)));
+        // A LANE STARTS once its rival has landed and a piggy is in its slot.
+        if (!this._briefing && !this._levelTurning && this._raceOn()) {
+            (this.lanes || []).forEach((lane, i) => {
+                if (lane.dropped && !lane.surged && !lane.leading && this.chargingSlots[i]) this._startLead(i);
+            });
+        }
+        // THE GREEN FIGURE climbs at its piggy's rate — smoothly, not in
+        // ticks, and slowed with the lane's slow motion — until frozen.
+        (this.lanes || []).forEach((lane, i) => {
+            const ah = lane.ahead, ln = this.finishLines[i];
+            if (!ah || ah.frozen) return;
+            ah.v += ah.rate * (ln && ln.slow ? ln.slow.k : 1) * delta / 1000;
+            this._setLaneLabel(i);
+        });
+        this.finishLines.forEach((ln, i) => {
+            const car = this.cars[i];
+            if (!ln || !ln.scene || !car) return;
+            if (ln.lockRoad && !ln.won) {
+                const gap = ln.x - (car.x + car.carW / 2);
+                if (S.ENABLED !== false && !ln.slow && gap < v(S.AHEAD, 0.45) * car.carW) {
+                    ln.slow = { k: 1, want: scale, end: Infinity };
+                }
+                if (gap <= 0) {
+                    ln.won = true;
+                    this._winFx(i);
+                    this._freezeAhead(i);
+                    if (ln.slow) ln.slow.end = time + v(S.HOLD_MS, 120);
+                }
+            }
+            const sl = ln.slow;
+            if (!sl || sl.done) return;
+            if (time >= sl.end) sl.want = 1;
+            const ms = Math.max(1, sl.want < sl.k ? v(S.IN_MS, 160) : v(S.OUT_MS, 300));
+            const r = (1 - scale) * delta / ms;
+            sl.k = sl.want < sl.k ? Math.max(sl.want, sl.k - r) : Math.min(sl.want, sl.k + r);
+            for (const t of ln.tws || []) t.timeScale = sl.k;
+            if (sl.k >= 1 && sl.want >= 1) sl.done = true;
+        });
+    }
+
+    // THE NOSE IS ON THE LINE: lane i's green figure stops at the winning
+    // margin, pops, holds while FINISH! is up, and fades.
+    _freezeAhead(i) {
+        const lane = this.lanes && this.lanes[i], t = this.laneLabels[i];
+        const R = CONFIG.RACE || {}, RL = R.LEAD || {}, v = (x, d) => (x !== undefined ? x : d);
+        if (!lane || !lane.ahead) return;
+        lane.ahead.frozen = true;
+        this._setLaneLabel(i);
+        this._bumpLabel(i, v(RL.FREEZE_SCALE, 1.45));
+        if (!t || !t.scene) return;
+        this.tweens.add({ targets: t, alpha: 0, delay: v(RL.HOLD_MS, 1200), duration: v(RL.FADE_MS, 300),
+            onComplete: () => { lane.ahead.gone = true; t.setAlpha(1); this._setLaneLabel(i); } });
+    }
+
+    // A quick swell and settle of lane i's figure.
+    _bumpLabel(i, k) {
+        const t = this.laneLabels[i];
+        if (!t || !t.scene) return;
+        this.tweens.add({ targets: t, scale: k, duration: 120, yoyo: true, ease: 'Quad.easeOut',
+            onComplete: () => t.setScale(1) });
+    }
+
+    // THE NEXT LEVEL once every lane is won and every finish has played out
+    // (slow motion makes how long that takes unknowable in advance).
+    _turnWhenDone() {
+        if (!this._levelTurning || this._turnQueued || !this.lanes) return;
+        if (this.lanes.some((l) => l.finishing)) return;
+        this._turnQueued = true;
+        const V = CONFIG.VILLAIN || {};
+        this.time.delayedCall(V.NEXT_LEVEL_MS !== undefined ? V.NEXT_LEVEL_MS : 900, () => {
+            this._turnQueued = false;
+            this._nextLevel();
+        });
+    }
+
+    // THE FINISH LINE: a chequered post standing on lane i's road with a
+    // chequered flag fluttering from its top, centred on x. Its `flag`,
+    // `postW`, `flagW` are kept for placing it and for clearing it.
+    _makeFinishLine(i, x) {
+        const L = (CONFIG.RACE || {}).LINE || {}, v = (n, d) => (n !== undefined ? n : d);
+        const car = this.cars[i], p = this.platforms[i];
+        const H = car.carH, ground = p.slotY + p.slotSize / 2;
+        const pw = Math.max(5, H * v(L.POST_W, 0.16)), ph = H * v(L.POST_H, 1.45);
+        const fw = H * v(L.FLAG_W, 0.72), fh = H * v(L.FLAG_H, 0.44);
+        const dark = hexColor(L.DARK || '#1c1c24'), light = hexColor(L.LIGHT || '#ffffff');
+        const [cols, rows] = L.CHECKS || [5, 3];
+        const lw = Math.max(1, pw * 0.12);
+
+        // The post: two columns of squares, from the ground up.
+        const s = pw / 2, n = Math.ceil(ph / s);
+        const post = this.add.graphics();
+        for (let r = 0; r < n; r++) {
+            for (let k = 0; k < 2; k++) {
+                post.fillStyle((r + k) % 2 ? dark : light, 1).fillRect(-pw / 2 + k * s, -(r + 1) * s, s, s);
+            }
+        }
+        post.lineStyle(lw, dark, 1).strokeRect(-pw / 2, -n * s, pw, n * s);
+
+        // The flag, hung from the post's top and flying back (left) off it.
+        const cw = fw / cols, ch = fh / rows;
+        const fg = this.add.graphics();
+        for (let r = 0; r < rows; r++) {
+            for (let k = 0; k < cols; k++) {
+                fg.fillStyle((r + k) % 2 ? dark : light, 1).fillRect(-fw + k * cw, r * ch, cw, ch);
+            }
+        }
+        fg.lineStyle(lw, dark, 1).strokeRect(-fw, 0, fw, fh);
+        const flag = this.add.container(-pw / 2, -n * s, [fg]);
+
+        const line = this.add.container(x, ground, [post, flag]).setDepth(v(L.DEPTH, 3.85));
+        line.flag = flag; line.postW = pw; line.flagW = fw;
+        this.tweens.add({ targets: flag, scaleX: 0.8, angle: 3, duration: v(L.WAVE_MS, 260),
+            yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        return line;
+    }
+
+    // THE WIN, as lane i's winner's nose crosses the line: a burst ring and
+    // rays, confetti, FINISH!, a shake, the winner's hop and dust, the line's
+    // punch, and the prize flying to the coin counter.
+    _winFx(i) {
+        const R = CONFIG.RACE || {}, W = R.WIN || {}, v = (x, d) => (x !== undefined ? x : d);
+        const sc = this.layoutConfig.platformScale;
+        const lane = this.lanes[i], car = this.cars[i], line = this.finishLines[i], p = this.platforms[i];
+        if (!lane || !car || !car.scene || !p) return;
+        const D = v(W.DEPTH, 6), ground = p.slotY + p.slotSize / 2;
+        const x = line && line.scene ? line.x : car.x + car.carW / 2;
+        const y = ground - car.carH * 0.75;
+
+        // THE BURST: a ring with rays, swelling and fading.
+        const burst = this.add.graphics({ x, y }).setDepth(D);
+        burst.lineStyle(Math.max(2, 5 * sc), 0xffffff, 1).strokeCircle(0, 0, 14 * sc);
+        burst.lineStyle(Math.max(2, 4 * sc), 0xffe27a, 1);
+        const rays = v(W.RAYS, 10);
+        for (let k = 0; k < rays; k++) {
+            const a = k / rays * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+            burst.lineBetween(c * 22 * sc, s * 22 * sc, c * 40 * sc, s * 40 * sc);
+        }
+        this.tweens.add({ targets: burst, scale: 4.5, alpha: 0, duration: v(W.RING_MS, 520),
+            ease: 'Cubic.easeOut', onComplete: () => burst.destroy() });
+
+        // CONFETTI: up and out from the line, then down to the road.
+        const cols = (W.COLORS || ['#ffd23f', '#ff5a5f', '#3ddc97', '#4cc9f0']).map(hexColor);
+        const SP = W.SPREAD || [-150, 150], RI = W.RISE || [90, 190], FL = W.FLIGHT_MS || [450, 800];
+        for (let k = 0; k < v(W.CONFETTI, 30); k++) {
+            const cw = Phaser.Math.FloatBetween(5, 9) * sc, ch = cw * Phaser.Math.FloatBetween(0.45, 0.9);
+            const c = this.add.graphics({ x, y }).setDepth(D);
+            c.fillStyle(cols[Math.floor(Math.random() * cols.length)], 1).fillRect(-cw / 2, -ch / 2, cw, ch);
+            c.setRotation(Math.random() * Math.PI * 2);
+            const t = Phaser.Math.Between(FL[0], FL[1]);
+            this.tweens.add({ targets: c, x: x + Phaser.Math.FloatBetween(SP[0], SP[1]) * sc,
+                duration: t * 1.3, ease: 'Sine.easeOut' });
+            this.tweens.add({ targets: c, rotation: c.rotation + Phaser.Math.FloatBetween(-8, 8),
+                duration: t * 1.3 });
+            this.tweens.add({ targets: c, y: y - Phaser.Math.FloatBetween(RI[0], RI[1]) * sc,
+                duration: t * 0.4, ease: 'Cubic.easeOut',
+                onComplete: () => this.tweens.add({ targets: c, y: ground + 4 * sc, alpha: 0,
+                    duration: t * 0.9, ease: 'Quad.easeIn', onComplete: () => c.destroy() }) });
+        }
+
+        // FINISH!, popping up over the line and floating away.
+        const size = Math.max(12, Math.round(v(W.TEXT_SIZE, 44) * sc));
+        const t = this._floatText('finish', {
+            fontSize: size + 'px', fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT,
+            color: W.TEXT_COLOR || '#ffe27a', stroke: W.TEXT_STROKE || '#2b2013',
+            strokeThickness: Math.max(3, Math.round(size * 0.14)),
+        });
+        const ty = y - car.carH * 0.72;
+        t.setText(W.TEXT || 'FINISH!').setOrigin(0.5).setDepth(D + 0.1)
+            .setPosition(x - (line ? line.flagW * 0.3 : 0), ty).setScale(0.2);
+        this.tweens.add({ targets: t, scale: 1, duration: 260, ease: 'Back.easeOut' });
+        this.tweens.add({ targets: t, y: ty - 28 * sc, alpha: 0, delay: 260 + v(W.TEXT_HOLD_MS, 900),
+            duration: 400, ease: 'Cubic.easeIn', onComplete: () => this._floatTextDone(t) });
+
+        if (W.SHAKE) this.cameras.main.shake(v(W.SHAKE_MS, 160), W.SHAKE);
+
+        // THE WINNER HOPS, the line takes the hit, dust at the tyres.
+        this.tweens.add({ targets: car, y: car.y - v(W.HOP, 7) * sc, duration: 110, yoyo: true, ease: 'Sine.easeOut' });
+        if (line && line.scene) {
+            this.tweens.add({ targets: line, scale: 1.12, duration: 110, yoyo: true, ease: 'Sine.easeOut' });
+        }
+        this._dust(car, -1, v(W.DUST, 6));
+
+        // THE PRIZE.
+        this.animateCoinReward(x, y, lane.payout);
+    }
+
+    // THE 1ST / 2ND BADGES over lane i's two stopped cars — popped up in
+    // turn, or put straight there (a rebuild). Returns how long it takes, ms.
+    _raceBadges(i, pop) {
+        const R = CONFIG.RACE || {}, B = R.BADGE || {}, v = (x, d) => (x !== undefined ? x : d);
+        const sc = this.layoutConfig.platformScale;
+        const car = this.cars[i], en = this.villains[i], p = this.platforms[i];
+        if (!car || !car.scene || !en || !en.scene || !p) return 0;
+        const ground = p.slotY + p.slotSize / 2;
+        const size = Math.max(10, Math.round(v(B.SIZE, 24) * sc));
+        const make = (spec, x, carH) => {
+            const t = this.add.text(0, 0, spec.TEXT, { fontSize: size + 'px', fontFamily: CONFIG.FONT_FAMILY,
+                fontStyle: CONFIG.FONT_WEIGHT, color: spec.INK }).setOrigin(0.5);
+            const w = t.width + size * 0.8, h = t.height + size * 0.1;
+            const g = this.add.graphics();
+            g.fillStyle(hexColor(spec.FILL), 1).fillRoundedRect(-w / 2, -h / 2, w, h, h / 2);
+            g.lineStyle(Math.max(2, 3 * sc), 0x2b2013, 1).strokeRoundedRect(-w / 2, -h / 2, w, h, h / 2);
+            return this.add.container(x, ground - carH - h / 2 - 6 * sc, [g, t]).setDepth(v(B.DEPTH, 4.6));
+        };
+        // The rival's badge goes over the part of it left showing — from its
+        // tail to the winner's tail, or the whole of it if they don't overlap.
+        const showEnd = Math.min(en.x + en.carW / 2, car.x - car.carW / 2);
+        const first = make(B.FIRST || { TEXT: '1ST', FILL: '#ffd23f', INK: '#5a3b00' }, car.x, car.carH);
+        const second = make(B.SECOND || { TEXT: '2ND', FILL: '#d7dde5', INK: '#2f3742' },
+            (en.x - en.carW / 2 + showEnd) / 2, en.carH);
+        this.raceBadges[i] = [first, second];
+        if (!pop) return 0;
+        const ms = v(R.BADGE_MS, 260);
+        [first, second].forEach((c, k) => {
+            c.setScale(0);
+            this.tweens.add({ targets: c, scale: 1, duration: ms, delay: k * 120, ease: 'Back.easeOut' });
+        });
+        return ms + 120;
+    }
+
+    // A lane already won, as it ends up, put straight there (a rebuild).
+    _raceFinal(i) {
+        const g = this._raceGeom(i);
+        if (!g) return;
+        this.finishLines[i] = this._makeFinishLine(i, g.lineX);
+        this._raceBadges(i, false);
     }
 
     // A slot's figure: metres per second.
@@ -2696,6 +3240,10 @@ class GameScene extends Phaser.Scene {
             if (!slot || !this._laneDriving(i)) continue;
             // THE PIGGY'S M/S OFF ITS LANE'S DISTANCE — its damage, in effect.
             const lane = this.lanes[i];
+            // What this tick goes PAST zero by: where the green "ahead"
+            // figure starts (_finishLane).
+            lane.over = Math.max(0, slot.distPerSec - lane.left);
+            lane.overRate = slot.distPerSec;
             const got  = Math.min(slot.distPerSec, lane.left);
             this.distance += got;
             lane.left = Math.max(0, lane.left - slot.distPerSec);
@@ -2768,6 +3316,24 @@ class GameScene extends Phaser.Scene {
         g.clear();
 
         this.platforms.forEach((p, i) => {
+            // WIND off a rival taking its head start (RACE.WIND, en.wind 0..1).
+            const en = this.villains[i];
+            if (en && en.scene && en.wind > 0.01) {
+                const WD = (CONFIG.RACE || {}).WIND || {}, WL = WD.LEN || [40, 120];
+                const eg = p.slotY + p.slotSize / 2, er = en.x - en.carW / 2;
+                const wc = hexColor(WD.COLOR || '#ffffff');
+                for (let m = 0; m < v(WD.LINES, 9); m++) {
+                    const h1 = this._cellHash(i, m, 21), h2 = this._cellHash(i, m, 22), h3 = this._cellHash(i, m, 23);
+                    const ph = (this._fxT * v(WD.SPEED, 3) * (0.7 + 0.6 * h1) + h2) % 1;
+                    const len = (WL[0] + (WL[1] - WL[0]) * h1) * sc;
+                    const x0 = er + en.carW * 0.25 * h3 - ph * v(WD.SPAN, 220) * sc;
+                    const x1 = Math.max(left, x0 - len);
+                    if (x0 <= x1) continue;
+                    const y = eg - en.carH * (0.12 + 0.95 * h3);
+                    g.lineStyle(Math.max(1, v(WD.LINE_W, 3) * sc), wc, v(WD.ALPHA, 0.75) * en.wind * Math.sin(Math.PI * ph));
+                    g.lineBetween(x1, y, x0, y);
+                }
+            }
             const car = this.cars[i];
             if (!car || !car.scene) return;
             const { k, p: pw } = this._chaseIntensity(i);
@@ -4169,6 +4735,7 @@ class GameScene extends Phaser.Scene {
         this._drawRoads(delta);
         this._drawSpeedFx(delta);
         this._peekFaces(delta);
+        this._raceTick(time, delta);
     }
 }
 
