@@ -715,7 +715,7 @@ var CONFIG = {
         // jumps.
         DRIVE_SHARE: 0.5,
         STOP_GAP:   10,
-        DRIVE_MS:   950,
+        DRIVE_MS:   1000,     // = the tick, so each roll runs into the next: no pause between
 
         // THE MEASURING LINE, ABOVE the lane: from the car's centre to the
         // villain's centre, ABOVE px (@ design) over the taller of the car's
@@ -934,9 +934,25 @@ var CONFIG = {
             LINE_BEHIND: [0.04, 0.45],
         },
         EDGE_PAD:      6,        // px @ design kept clear of the screen's right edge
-        TILT:          3,        // degrees the winner noses up as it pulls away
         BRAKE_TILT:    5,        // degrees the rival noses down braking
         BADGE_MS:      260,      // the 1ST / 2ND badges popping up
+
+        // THE LEVEL'S LAST WIN — the lane that completes the level — is the
+        // big finish: a LUNGE for the line (AHEAD x the car's length before
+        // it, a short burst forward of SURGE x its length that eases back,
+        // and a KICK to the springs — rear down, nose up — that settles by
+        // itself; both picked afresh each time), slow motion, zoom and
+        // confetti. The other two lanes finish lighter: the burst, FINISH!,
+        // the green margin and the coins, without slow motion, zoom or
+        // confetti (SLOWMO.FINAL_ONLY, WIN.CONFETTI_SMALL).
+        LUNGE: {
+            ENABLED: true,
+            AHEAD:   0.35,
+            SURGE:   [0.04, 0.08],
+            KICK:    [110, 170],   // px/s @ design, into the springs
+            OUT_MS:  160,          // the burst forward
+            BACK_MS: 420,          // easing back into place
+        },
 
         // THE LEAD FIGURE'S COLOUR: BEHIND_COLOR while the rival leads. Once
         // the piggy overtakes it turns AHEAD_COLOR with AHEAD_PREFIX, starting
@@ -964,13 +980,25 @@ var CONFIG = {
         // SCALE speed over IN_MS, crosses in slow motion, and HOLD_MS after
         // the win goes off eases back to full speed over OUT_MS. The other
         // lanes and the merge grid are not slowed.
+        // ZOOM: that lane's SECTION ALONE zooms in on the crossing for the
+        // slow motion — SCALE times, over IN_MS — and back out over OUT_MS as
+        // it ends, like a camera of its own. The merge grid and the other
+        // lanes do not move.
         SLOWMO: {
             ENABLED:  true,
-            SCALE:    0.25,
-            AHEAD:    0.45,
-            IN_MS:    160,
-            HOLD_MS:  120,
-            OUT_MS:   300,
+            FINAL_ONLY: true,    // only the level's last finish (false: every lane)
+            SCALE:    0.45,      // half speed or so: slow, but plainly still moving
+            AHEAD:    0.8,
+            IN_MS:    200,
+            HOLD_MS:  250,
+            OUT_MS:   350,
+            ZOOM: {
+                ENABLED: true,
+                SCALE:   1.35,        // at most: less if the lead figure would not fit in view
+                IGNORE_DEPTH: 50,     // not drawn zoomed: coins in flight, a dragged pig, the UI
+                IN_MS:   350,
+                OUT_MS:  450,
+            },
         },
 
         // THE FINISH LINE: a chequered post standing on the road, a chequered
@@ -990,7 +1018,8 @@ var CONFIG = {
         // THE WIN, as the winner's front crosses the line.
         WIN: {
             DEPTH:      6,
-            CONFETTI:   30,
+            CONFETTI:   30,          // the level's last finish
+            CONFETTI_SMALL: 0,       // the other two
             COLORS:     ['#ffd23f', '#ff5a5f', '#3ddc97', '#4cc9f0', '#ffffff', '#ff9f1c'],
             RISE:       [90, 190],   // px @ design the confetti flies up
             SPREAD:     [-150, 150], // …and sideways
@@ -1013,6 +1042,53 @@ var CONFIG = {
             FIRST:      { TEXT: '1ST', FILL: '#ffd23f', INK: '#5a3b00' },
             SECOND:     { TEXT: '2ND', FILL: '#d7dde5', INK: '#2f3742' },
         },
+    },
+
+    // ── THE RANK ─────────────────────────────────────────────────────────────
+    // The player climbs a racer ranking, one level at a time. Before the first
+    // race they are #START; it falls by the same share each level (about 9%
+    // with these figures) — big jumps while the rank is big, smaller as it
+    // shrinks (CURVE above 1 front-loads it) — to TAIL + 1, then one place a
+    // level to #1 when level TOP_LEVEL is won, and stays #1 after (for now: a
+    // short CHAMPION toast). Each level's opponent is the racer at the rank
+    // the player is about to take.
+    //
+    // After each level a quick panel shows it over the race area only (the
+    // merge grid carries on): the player's row slides up past the rival just
+    // beaten as the rank counts down, the next opponent at the foot. A tap on
+    // it skips; the next level starts as it goes.
+    RANK: {
+        ENABLED:   true,
+        START:     2000,
+        TOP_LEVEL: 65,
+        TAIL:      10,
+        CURVE:     1,
+        DELAY_MS:       250,   // after the level's last finish, before it shows
+        POP_MS:         180,
+        SLIDE_DELAY_MS: 120,
+        SLIDE_MS:       800,
+        HOLD_MS:        650,
+        OUT_MS:         220,
+        DEPTH:     40,
+        W:         440,        // px @ design, at most (and 86% of the race area)
+        ROW_H:     40,
+        TITLE:       'RANK UP!',
+        CHAMP_TEXT:  'CHAMPION! #1',
+        YOU:         'YOU',
+        NEXT:        'NEXT',
+        CARD:        '#fff6e6',
+        INK:         '#2b2013',
+        TITLE_COLOR: '#e8590c',
+        YOU_FILL:    '#ffd23f',
+        ROW_FILL:    '#f1e2c8',
+        GAP_COLOR:   '#a08560',
+        NEXT_COLOR:  '#6b4a2a',
+        // Racer names, fixed per rank.
+        NAMES: ['Turbo Tess', 'Dusty Dan', 'Nitro Nia', 'Rusty Rex', 'Zippy Zoe', 'Blaze Bo',
+                'Skid Sam', 'Vroom Val', 'Drift Dex', 'Rocket Ray', 'Gravel Gus', 'Piston Pia',
+                'Torque Ty', 'Boost Bea', 'Clutch Cal', 'Spark Sid', 'Fender Flo', 'Gearbox Gil',
+                'Hubcap Hal', 'Axle Ada', 'Throttle Tim', 'Brake Bree', 'Chrome Cleo', 'Exhaust Eli',
+                'Muffler Mo', 'Spoiler Sal', 'Wheelie Wes', 'Racer Ruby', 'Lap Lou', 'Pit Pete'],
     },
 
     // ── THE CHASE'S FEEDBACK ─────────────────────────────────────────────────
