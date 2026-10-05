@@ -617,18 +617,13 @@ var CONFIG = {
 
     // ── THE ROAD ─────────────────────────────────────────────────────────────
     // The only scenery: one thin line per lane at its ground level — the line
-    // the tyres and the villain stand on — with small marks along it (dashes
+    // the tyres of both cars stand on — with small marks along it (dashes
     // on the line, pebbles under it) and a few real BUMPS in it, all sliding
     // BACKWARDS while the lane's car is driving, so the car reads as moving.
     // They run in step with the tyres' spin (CAR.SPIN_*), starting, coasting
     // and stopping with them. The tyres ride over the bumps and the body
-    // follows on its springs (SUSPENSION).
-    //
-    // THE MARKS AND BUMPS FADE OUT BEFORE THE VILLAIN: full under and behind
-    // the car, thinning (bumps flattening) from FADE_AHEAD past its front
-    // bumper over FADE_LEN, and gone at the latest CLEAR px short of the
-    // villain — so the villain stands on still, flat road rather than seeming
-    // to slide along with it.
+    // follows on its springs (SUSPENSION). In a finish the road is carried by
+    // the finish line (RACE).
     ROAD: {
         LINE_COLOR:  '#a3825c',
         LINE_W:      3,          // px @ design
@@ -636,10 +631,7 @@ var CONFIG = {
         SPEED:       420,        // px/s @ design the marks slide at, full speed
         PERIOD:      420,        // px @ design before the pattern of marks repeats
         MARKS:       8,          // marks in one period
-        FADE_AHEAD:  20,         // px @ design past the bumper before the fade starts
-        FADE_LEN:    140,        // px @ design the fade takes
-        CLEAR:       18,         // px @ design kept clear before the villain
-        DEPTH:       3.8,        // under the cars and villains
+        DEPTH:       3.8,        // under the cars
 
         // THE BUMPS: smooth rises in the road, H px high and W px long
         // (@ design), each a random 70–100% of that. RARE, so each one reads
@@ -647,13 +639,6 @@ var CONFIG = {
         // about every 5–6 seconds at SPEED — coming closer together level by
         // level down to EVERY_MIN at level MIN_AT_LEVEL and after.
         BUMPS: { H: 6, W: 80, EVERY: 2400, EVERY_MIN: 1000, MIN_AT_LEVEL: 30 },
-        // THE BREAK IN THE ROAD before each villain: the car's road and the
-        // villain's own short piece of it, W px apart (@ design), so the
-        // villain reads as being further off than the screen shows. The
-        // villain's piece starts VILLAIN_PAD px before its left edge. The gap
-        // closes — the road joins — when the car reaches the villain, over
-        // CLOSE_MS, and opens again for the next level's.
-        GAP: { W: 26, VILLAIN_PAD: 14, CLOSE_MS: 250 },
         SAMPLE: 4,               // px @ design between points of the drawn road
     },
 
@@ -664,148 +649,62 @@ var CONFIG = {
     // then rear, so the car pitches over each bump and settles.
     //   STIFFNESS  how fast the springs answer (rad/s): higher is stiffer
     //   DAMPING    how quickly they settle: 1 = no wobble, lower = bouncier
-    //   SQUAT      the body rocking back as the car pulls away and nosing
-    //              down as it stops (px/s @ design kicked into the springs
-    //              per full change of speed)
     //   MAX        the most a spring may stretch or squash, px @ design — the
     //              lanes are close, so the body never leaves its own lane
     SUSPENSION: {
         STIFFNESS: 16,
         DAMPING:   0.35,
-        SQUAT:     60,
         MAX:       9,
     },
 
-    // ── THE VILLAINS ─────────────────────────────────────────────────────────
-    // One per lane, three to a level, all the same villain: level 1 wears
-    // FILES[0], level 2 FILES[1], level 3 FILES[2], level 4 FILES[0] again, and
-    // so on. They stand still at the right of the car area, on their lane's
-    // road line. Between each car and its villain is a measuring line with
-    // how far apart they are (levelData.js); the lane's piggy takes its m/s off
-    // that every tick and the car DRIVES FORWARD along the line to match, so
-    // the gap visibly closes. At zero the car is up against the villain and it
-    // is caught — gone, and its payout showered to the coin counter. All three
-    // caught: the next level, and the cars roll back to the start.
+    // ── THE RIVALS ───────────────────────────────────────────────────────────
+    // One per lane, three to a level, all the same rival — its car a new
+    // design each level (CAR.CARS), its driver's head in the window from the
+    // rival pictures: level 1 wears FILES[0], level 2 FILES[1], level 3
+    // FILES[2], level 4 FILES[0] again, and so on. (The key is still called
+    // VILLAIN from the game's earlier life; it is the rival.) See CONFIG.RACE
+    // for the race itself.
     VILLAIN: {
         DIR:   'graphics/villain/',
         FILES: ['villain_01.webp', 'villain_02.webp', 'villian_03.webp'],
-        // Height, ground to head, as a multiple of the CAR's height — capped
-        // at MAX_BAND_FRAC of the lane's band so it never reaches the lane above.
-        H_FRAC:        1.25,
-        MAX_BAND_FRAC: 0.85,
-        // …and then scaled by this, whatever capped it above — 0.75 is 25%
-        // smaller than the size those give.
-        SCALE:         0.75,
-        X_FRAC:        0.7,      // its middle, across the free space right of the cars
+        X_FRAC:        0.7,      // its home: its middle, across the free space right of the cars
         EDGE_PAD:      12,       // px @ design kept clear of the screen's right edge
         DEPTH:         4,
-        PAYOUT_MULT:   1,        // coins = its distance × this (levels 1–2 are flat)
+        PAYOUT_MULT:   1,        // coins = its lead × this (levels 1–2 are flat)
 
-        CAUGHT_MS:     350,      // how long a caught villain takes to fade out
-        NEXT_LEVEL_MS: 900,      // pause after the last catch before the next level
-        ENTER_MS:      400,      // how long the next level's villains take to appear
+        NEXT_LEVEL_MS: 900,      // (no rank panel) pause after the last win before the next level
+        ENTER_MS:      400,      // a new level: the piggy cars roll back to the line in this + 200
 
-        // THE CAR'S DRIVE. It starts beside its slot and, as the distance
-        // runs down, moves toward the villain in proportion to how much of the
-        // level's distance is covered. It only goes DRIVE_SHARE of the way —
-        // 0.5 stops it halfway between its start and the villain at zero — so
-        // a car never LOOKS nearly there while the figure still reads 1000 m.
-        // (1 would take its front bumper to STOP_GAP px short of the villain.)
-        // Each tick's move is spread over DRIVE_MS so the car rolls rather than
-        // jumps.
-        DRIVE_SHARE: 0.5,
-        STOP_GAP:   10,
+        // Each tick's move is spread over DRIVE_MS so the cars roll rather
+        // than jump.
         DRIVE_MS:   1000,     // = the tick, so each roll runs into the next: no pause between
 
-        // THE MEASURING LINE, ABOVE the lane: from the car's centre to the
-        // villain's centre, ABOVE px (@ design) over the taller of the car's
-        // roof and the villain's head, with the distance on it:
-        //        |<-------- 65 m -------->|
-        //        :                        :
-        //      [car]                   villain
-        // A faint LEADER drops from each end toward what it measures from, to
-        // LEADER_GAP px above it.
-        GAP_LINE: {
-            // Off: no line — the figure rides over the villain instead (see
-            // LABEL.ABOVE), and there is no unit, so it reads as what is
-            // left to catch it rather than a measurement of the gap on screen.
-            ENABLED:    false,
-            ABOVE:      32,      // px @ design over the taller of roof and head
-            LEADERS:    false,   // the faint drop lines — off: the line floats free
-            LEADER_GAP: 6,       // px @ design the leader stops short of them
-            LEADER_ALPHA: 0.45,
-            W:        3,         // line width, px @ design
-            ARROW:    11,        // arrowhead length, px @ design
-            END_TICK: 18,        // the upright bar at each end, px @ design
-            TEXT_PAD: 8,         // px @ design between the line and the figure
-            COLOR:    '#ffffff',
-            ALPHA:    0.95,
-        },
-        // THE FIGURE on the line. Too long for the line (the car nearly
-        // there), it sits just above it instead.
+        // THE LEAD FIGURE over each lane (placed by RACE.LEAD).
         LABEL: {
             SIZE:     30,        // px @ design
             COLOR:    '#ffffff',
             STROKE:   '#2b2013',
             STROKE_W: 5,
             SUFFIX:   '',        // no unit: a count to zero, not a distance
-            ABOVE:    10,        // px @ design over the taller car (no line)
-            ZERO_MS:  600,       // the 0 stays up this long after the catch
         },
 
-        // THE GETAWAY CAR. Each villain flees in a car — the piggy car's own
-        // body (TINT to recolour it), with the villain's head in the driver's window — so a
-        // villain is one front-facing picture (on its wanted card and in the
-        // window) and no running frames. It stands where the villain stood,
-        // drawn BEHIND the piggy car, and rides the road with it: tyres
-        // spinning, bumps and suspension, all while the lane is driving.
-        //
-        // CAUGHT: the two are level by then (CHASE_TARGET); the piggy car
-        // eases ahead and the getaway car brakes back behind it, its front
-        // half hidden: cut off and blocked. Then the brakes — a
-        // jolt, skid marks, dust, a little shake. The CAUGHT card and badge
-        // go over the two stopped cars, centred on them.
+        // THE RIVAL'S CAR: a right-facing body and tyres (CARS, a new design
+        // each level), the driver's head in its window, drawn BEHIND the
+        // piggy car. It rides the road with it: tyres spinning, bumps and
+        // suspension.
         CAR: {
-            ENABLED: true,         // false: villains stand on the road instead
             TINT:    null,         // a colour to tint the body with, or null for none
             SCALE:   1,            // of the piggy car's size
             DEPTH:   3.9,          // behind the piggy car (CAR.DEPTH 4)
-            // HOW FAR THE PIGGY CAR GETS as the distance runs down (in place
-            // of DRIVE_SHARE): at the last metre its front bumper is this far
-            // along the getaway car — 0 its rear, 0.5 its middle, 1 its front.
-            // Near 1, the two are level by the last metre and the catch is a
-            // gentle crossover, not a burst of speed.
-            CHASE_TARGET: 0.85,
-            // WHERE THEY MEET, as a share of the car area's width (from the
-            // slots to the screen's right edge): the two cars come level with
-            // their middle here. The piggy car comes forward AND the getaway
-            // car drifts back as the gap closes, so the crossover happens
-            // mid-road rather than at its far end. Never further than the
-            // getaway car's start, nor behind the piggy car's.
-            MEET_AT: 0.55,
             // The head in the window, in the BODY's pixels (254 x 97): its
-            // centre at X, Y and H tall — the top HEAD_FRAC of the villain's
+            // centre at X, Y and H tall — the top HEAD_FRAC of the rival's
             // picture, which is the head.
             FACE: { X: 126, Y: 28, H: 40, HEAD_FRAC: 0.55 },
-            // CAUGHT, OUT OF THE CAR: once the cars have stopped, the villain
-            // pops up standing on the road in front of both, centred on them,
-            // and the cuffs slam on over its hands. It stays till the level
-            // ends. Then the card (WANTED.CATCH).
-            PERP: {
-                ENABLED: true,
-                H_FRAC:  1.05,       // its height, as a share of the piggy car's
-                DEPTH:   4.5,        // over both cars
-                CUFF_W:  0.6,        // the cuffs' width, as a share of the villain's
-                CUFF_AT: 0.4,        // their height up it, as a share (its hands)
-                POP_MS:  260,
-                CUFF_MS: 220,
-            },
             // THE LOOK BACK: the driver stays down out of sight — only the
             // window shows — and pops up from the sill to glance back only at
-            // milestones: as it gets in (the wanted card landing) and as the
-            // piggy car passes each share of the distance in AT, staying up
-            // SHOW seconds (a random time in the range). Caught, it stays up.
-            // ENABLED false keeps it up the whole time.
+            // milestones, as the piggy car runs down each share of the lead in
+            // AT, staying up SHOW seconds (a random time in the range). Beaten,
+            // it stays up. ENABLED false keeps it up the whole time.
             PEEK: {
                 ENABLED: true,
                 AT:      [0.2, 0.4, 0.6, 0.8, 0.95],   // shares of the distance covered
@@ -813,7 +712,7 @@ var CONFIG = {
                 UP_MS:   160,        // popping up (0: just there)
                 DOWN_MS: 0,          // ducking back down (0: just gone, no animation)
             },
-            // THE GETAWAY CAR DESIGNS — a NEW ONE EVERY LEVEL, in this order,
+            // THE RIVAL CAR DESIGNS — a NEW ONE EVERY LEVEL, in this order,
             // starting over once all have been used: a right-facing body and
             // its tyre, laid out like CONFIG.CAR — BODY_W x BODY_H art px,
             // TYRE_SIZE square tyres with their TOP-LEFT corners at TYRES
@@ -830,62 +729,40 @@ var CONFIG = {
                 getawayCarArt(6, 256,  77, 56, [19, 39], [157, 39], { X: 112, Y: 17, H: 30 }),   // blue sports car
                 getawayCarArt(7, 256, 101, 54, [30, 67], [176, 67], { X: 143, Y: 30, H: 36 }),   // orange wagon
             ],
-            BLOCK: {
-                // THE CROSSOVER, from level (CHASE_TARGET): the piggy car
-                // carries on at chase pace and eases to a stop SURGE px further
-                // on (never past the screen's edge), while the getaway car
-                // brakes back beside it until OVERLAP of it is hidden.
-                SURGE:     22,     // px @ design
-                OVERLAP:   0.55,   // share of the getaway car hidden behind it
-                SLIDE_MS:  700,    // the crossover, start to stop
-                CUT_TILT:  4,      // degrees the piggy car noses up cutting in
-                BRAKE_TILT: 5,     // degrees the getaway car noses down braking
-                BRAKE_MS:  140,
-                SKID_LEN:  46,     // px @ design of skid mark behind each tyre
-                PUFFS:     5,      // dust puffs at the getaway car's tyres
-                DUST:      '#d9c3a0',
-                SETTLE_MS: 260,    // after the brakes, before the CAUGHT card
-                SHAKE:     0,        // camera shake as the getaway car is blocked (0 = none)
-                SHAKE_MS:  140,
-            },
         },
     },
 
     // ── THE RACE ─────────────────────────────────────────────────────────────
-    // Each lane is a race against the level's rival, not a chase. The three
-    // run side by side, in parallel, and read as three rounds.
+    // Each lane is a race against the level's rival. The three run side by
+    // side, in parallel, and read as three rounds.
     //
-    //   START   every car lines up level, the piggy car drawn over the
-    //           rival's. After START_HOLD_MS the rival pulls ahead to where
-    //           the level's distance puts it, and its figure counts up from 0
-    //           to that distance as it goes. Then the piggy works the figure
-    //           back down.
-    //   OVERTAKE  at 0 the two are nose to nose. There is no stop: the piggy
-    //           car pulls ahead of the rival, toward the right of the screen.
-    //   FINISH  a chequered finish line comes in from the right ON THE ROAD —
-    //           it slides back with the road, as everything on the road does
-    //           (the camera is moving forward). The piggy car's nose crosses
-    //           it first (the win effects), then the rival's. The road slows
-    //           to a stop with the line behind BOTH cars, the piggy car ahead
-    //           at the right, the rival stopped behind it (OVERLAP of it
-    //           tucked behind the winner) with a brake jolt, skid marks and
-    //           dust. 1ST / 2ND badges go over the two.
+    // EACH LANE IS A LITTLE WORLD seen through its own camera (see
+    // GameScene._raceStep): the cars have places along the road and speeds,
+    // the finish line stands on the road, and the road scrolls with the
+    // lane's camera. V, the racing pace, is the road's speed (ROAD.SPEED).
+    //
+    //   START   each rival DROPS in from above, lined up with the piggy car.
+    //           The lane waits, still, until it has a piggy; LEAD_DELAY_MS
+    //           later both set off — the rival reaches V in LEAD_RIVAL_MS and
+    //           keeps it, the piggy car gets there later, so the gap opens to
+    //           the whole lead (the figure counting up, wind off the rival).
+    //   RACING  the rival holds V, holding its place on screen (RIVAL_AT of
+    //           the car area); the piggy car stands behind it by the lead and
+    //           closes as the piggy runs it down. With no piggy the lead, and
+    //           the car, hold.
+    //   FINISH  when the count reaches 0 the noses meet. The line stands on
+    //           the road AHEAD_MS of the car's speed ahead; the car keeps its
+    //           speed till wholly across, then rolls on and brakes to its
+    //           spot; the rival keeps V till its nose is over, then brakes to
+    //           rest behind. The camera follows the piggy car, carrying the
+    //           line out of the frame, and ends on the end picture (VARY).
+    //           1ST / 2ND badges go over the two.
     //
     // The player always wins: the figure only ever has to be run down.
     RACE: {
-        ENABLED:       true,     // false: the old chase (villains, wanted cards)
-        // WHERE THEY COME LEVEL, as a share of the car area's width — in
-        // place of VILLAIN.CAR.MEET_AT. Kept left so there is road ahead for
-        // the finish. CHASE_TARGET 1: at 0 the noses are level.
-        MEET_AT:       0.30,
-        CHASE_TARGET:  1,
+        RIVAL_AT:      0.62,     // where the rival holds while racing, share of the car area
 
-        // THE START. Each rival DROPS in from above onto the road behind the
-        // piggy car (a new level's piggy car rolls back to the line meanwhile)
-        // and settles on its springs. A lane then waits, still, until a piggy
-        // is in its slot; LEAD_DELAY_MS after that the rival takes its head
-        // start over LEAD_MS, wind streaming off it, the figure counting up.
-        // Taken out after that, the piggy only freezes the lead.
+        // THE START: the drop-in, then the head start.
         DROP: {
             MS:         380,     // the fall
             HEIGHT:     0.5,     // falls from this share of a lane's band above the road
@@ -895,8 +772,8 @@ var CONFIG = {
             KICK:       160,     // px/s @ design the springs take on landing
             DUST:       6,
         },
-        LEAD_DELAY_MS: 300,
-        LEAD_MS:       1100,
+        LEAD_DELAY_MS: 300,      // after the piggy goes in, before they set off
+        LEAD_RIVAL_MS: 350,      // the rival's pick-up to V (the piggy car's is as long as the lead needs)
         // THE WIND off the rival as it pulls ahead: streaks from its tail and
         // across its height, sliding back.
         WIND: {
@@ -909,49 +786,46 @@ var CONFIG = {
             ALPHA:   0.95,
             FADE_MS: 350,        // dying away once it has its lead
         },
+        // THE TYRES turn as fast as their car goes: at road speed V they spin
+        // SPIN_AT_ROAD x CAR.SPIN_DEG_PER_SEC. So the rival's outrun the piggy
+        // car's in the head start, and the piggy car's outrun the rival's
+        // while its piggy closes the lead.
+        SPIN_AT_ROAD:  1.3,
 
-        // THE FINISH
-        PASS_MS:       600,      // the piggy car pulling ahead before the line comes in
-        PASS_LEAD:     0.35,     // by then the rival's nose is this far (x the car's length) behind
-        // THE LINE rides the road: it comes in at the road's speed and slows
-        // with it (the camera braking) to a stop behind the rival's tail
-        // (VARY.LINE_BEHIND) — so both cars are fully past it. How long that
-        // takes follows from the road's speed and the distance, kept within
-        // LINE_MIN_MS..LINE_MAX_MS.
-        LINE_MIN_MS:   1600,
-        LINE_MAX_MS:   3200,
-        RUNNER_LAG_MS: 300,      // the rival stops this long after the road does
-        // THE END SCREEN, varied so the three lanes never line up: each level
+        // THE FINISH. How far ahead the line stands — AHEAD_MS of the car's
+        // speed — is picked afresh per lane, so finishes differ: short is
+        // close, long a clear win with the rival well back.
+        AHEAD_MS:      [700, 2200],
+        CAM: {
+            DRIFT_S:   0.4,      // after the noses meet, the piggy car's lead over the rival on screen fades over about this (s)
+        },
+        // THE END SCREEN: past the line both cars roll on till it has left
+        // the road's frame (LINE.OFF_PAD), so no flag is left waving there;
+        // they stop varied, so the three lanes never line up — each level
         // gives the lanes different stopping depths (front / mid / back, up
         // to CAR_BACK x the car's length short of the right edge, give or
         // take JITTER of that), and each its own share of the rival tucked
-        // behind the winner (OVERLAP; below 0 would be a small gap) and distance
-        // from the rival's tail back to the flag (LINE_BEHIND, x its length).
+        // behind the winner (OVERLAP; below 0 a gap — never so far back that
+        // the rival leaves the frame).
         VARY: {
             CAR_BACK:    0.2,
             JITTER:      0.25,
-            OVERLAP:     [0.2, 0.4],
-            LINE_BEHIND: [0.04, 0.45],
+            OVERLAP:     [-0.3, 0.45],   // from a gap behind to tucked in; never ahead
         },
         EDGE_PAD:      6,        // px @ design kept clear of the screen's right edge
-        BRAKE_TILT:    5,        // degrees the rival noses down braking
         BADGE_MS:      260,      // the 1ST / 2ND badges popping up
 
         // THE LEVEL'S LAST WIN — the lane that completes the level — is the
         // big finish: a LUNGE for the line (AHEAD x the car's length before
-        // it, a short burst forward of SURGE x its length that eases back,
-        // and a KICK to the springs — rear down, nose up — that settles by
-        // itself; both picked afresh each time), slow motion, zoom and
+        // it, a short burst forward of SURGE x its length, kept to the end;
+        // no lift of its own — the win's hop is the one lift), the ZOOM, and
         // confetti. The other two lanes finish lighter: the burst, FINISH!,
-        // the green margin and the coins, without slow motion, zoom or
-        // confetti (SLOWMO.FINAL_ONLY, WIN.CONFETTI_SMALL).
+        // the green margin and the coins (WIN.CONFETTI_SMALL).
         LUNGE: {
             ENABLED: true,
             AHEAD:   0.35,
             SURGE:   [0.04, 0.08],
-            KICK:    [110, 170],   // px/s @ design, into the springs
-            OUT_MS:  160,          // the burst forward
-            BACK_MS: 420,          // easing back into place
+            OUT_MS:  160,          // the burst forward — then kept
         },
 
         // THE LEAD FIGURE'S COLOUR: BEHIND_COLOR while the rival leads. Once
@@ -975,36 +849,26 @@ var CONFIG = {
             FADE_MS:      300,
         },
 
-        // SLOW MOTION at the line, per lane: as the line comes within AHEAD
-        // (x the car's length) of the winner's nose, that lane eases down to
-        // SCALE speed over IN_MS, crosses in slow motion, and HOLD_MS after
-        // the win goes off eases back to full speed over OUT_MS. The other
-        // lanes and the merge grid are not slowed.
-        // ZOOM: that lane's SECTION ALONE zooms in on the crossing for the
-        // slow motion — SCALE times, over IN_MS — and back out over OUT_MS as
-        // it ends, like a camera of its own. The merge grid and the other
-        // lanes do not move.
-        SLOWMO: {
-            ENABLED:  true,
-            FINAL_ONLY: true,    // only the level's last finish (false: every lane)
-            SCALE:    0.45,      // half speed or so: slow, but plainly still moving
-            AHEAD:    0.8,
-            IN_MS:    200,
-            HOLD_MS:  250,
-            OUT_MS:   350,
-            ZOOM: {
-                ENABLED: true,
-                SCALE:   1.35,        // at most: less if the lead figure would not fit in view
-                IGNORE_DEPTH: 50,     // not drawn zoomed: coins in flight, a dragged pig, the UI
-                IN_MS:   350,
-                OUT_MS:  450,
-            },
+        // THE ZOOM, on the level's last finish: as the line comes within
+        // AHEAD (x the car's length) of the winner's nose, that lane's
+        // SECTION ALONE zooms in on the crossing — at most SCALE, over IN_MS —
+        // like a camera of its own, and HOLD_MS after the win eases back out
+        // over OUT_MS. The merge grid and the other lanes do not move.
+        ZOOM: {
+            ENABLED: true,
+            AHEAD:   0.8,
+            SCALE:   1.35,        // at most: less if the lead figure would not fit in view
+            IN_MS:   350,
+            HOLD_MS: 250,
+            OUT_MS:  450,
+            IGNORE_DEPTH: 50,     // not drawn zoomed: coins in flight, a dragged pig, the UI
         },
 
         // THE FINISH LINE: a chequered post standing on the road, a chequered
         // flag flying from its top. Sizes are shares of the car's height.
         LINE: {
             DEPTH:    3.85,      // behind the cars, over the road
+            OFF_PAD:  8,         // px @ design past the road's left edge it ends, out of the frame
             POST_W:   0.16,
             POST_H:   1.45,
             FLAG_W:   0.72,
@@ -1018,12 +882,15 @@ var CONFIG = {
         // THE WIN, as the winner's front crosses the line.
         WIN: {
             DEPTH:      6,
-            CONFETTI:   30,          // the level's last finish
+            CONFETTI:   80,          // the level's last finish
             CONFETTI_SMALL: 0,       // the other two
+            CONFETTI_SIZE: [7, 13],  // px @ design, each piece's long side
+            CONFETTI_RAIN: 45,       // the last finish's shower, falling from the lane's top
+            RAIN_MS:    [900, 1500], // each piece's fall
             COLORS:     ['#ffd23f', '#ff5a5f', '#3ddc97', '#4cc9f0', '#ffffff', '#ff9f1c'],
-            RISE:       [90, 190],   // px @ design the confetti flies up
-            SPREAD:     [-150, 150], // …and sideways
-            FLIGHT_MS:  [450, 800],
+            RISE:       [90, 190],   // px @ design the confetti flies up — never above its lane's top
+            SPREAD:     [-260, 260], // …and sideways
+            FLIGHT_MS:  [650, 1150],
             RING_MS:    520,         // the burst ring and its rays
             RAYS:       10,
             TEXT:       'FINISH!',
@@ -1031,9 +898,11 @@ var CONFIG = {
             TEXT_COLOR: '#ffe27a',
             TEXT_STROKE:'#2b2013',
             TEXT_HOLD_MS: 900,
-            SHAKE:      0.004,       // camera shake strength (0 = none)
+            SHAKE:      0,           // camera shake strength (0 = none) — off: it shook the whole screen, merge grid and all
             SHAKE_MS:   160,
-            HOP:        7,           // px @ design the winner hops on its springs
+            HOP:        12,          // px @ design the winner's hop rises
+            HOP_MS:     380,         // up and down, at full speed (slowed with the slow motion)
+            HOP_LAND:   90,          // px/s @ design the springs take landing
             DUST:       6,           // puffs at the winner's tyres
         },
         BADGE: {
@@ -1106,6 +975,19 @@ var CONFIG = {
             MS:       800,
             JITTER:   10,        // px @ design of sideways scatter, so ticks don't stack
         },
+        // THE CAR GLIDES. The lead figure steps down by the piggy's value at
+        // each tick; the piggy car closes that much smoothly, at the piggy's
+        // rate, without stopping between ticks. ENABLED false: it jumps with
+        // the figure instead.
+        COUNT: {
+            ENABLED: true,
+        },
+        // THE PIGGY'S FIGURE PULSES on each tick, as the lead drops.
+        RATE_PULSE: {
+            ENABLED: true,
+            SCALE:   1.2,
+            MS:      200,
+        },
         // SPEED LINES AND EXHAUST behind the piggy car while it drives, as
         // strong as the chase is quick: by how many seconds the lane's piggy
         // would take to cover the whole level distance — SLOW_SECS or more is
@@ -1129,62 +1011,6 @@ var CONFIG = {
             // pixels (CONFIG.CAR.BODY_W x BODY_H) — RATE puffs a second.
             EXHAUST: { X: 6, Y: 78, RATE: [1.5, 9], R: [3, 6], LIFE: 0.6,
                        COLOR: '#ffffff', ALPHA: 0.55, MAX: 60 },
-        },
-    },
-
-    // ── THE WANTED CARDS ─────────────────────────────────────────────────────
-    // The bounty board. When a level begins, each villain's WANTED card — its
-    // face and its bounty — pops up over it, holds a moment, then shrinks into
-    // the villain and the chase starts (a tap anywhere starts it at once).
-    // Merging carries on throughout; only the cars wait. A level resumed part
-    // way through gets no cards.
-    //
-    // When a villain is caught (after the cuffed villain steps out —
-    // VILLAIN.CAR.PERP) its card comes back on the road ahead of the stopped
-    // cars, a red cross slams onto its photo, and the bounty flies from the
-    // card to the coin counter as the bounty line goes. The card stays there,
-    // marking the lane done until the level ends. (Without getaway cars it
-    // shrinks to a BADGE_SCALE badge where the villain stood instead.)
-    //
-    // The card and the cuffs are drawn in code for now; art can replace them.
-    WANTED: {
-        ENABLED:    true,
-        DEPTH:      5,           // over the villains (4)
-        // Size: H_FRAC of a lane's band high, ASPECT wide per unit of height —
-        // and narrowed (keeping ASPECT) if the villain area is narrower.
-        H_FRAC:     0.95,
-        ASPECT:     0.78,
-        EDGE_PAD:   8,           // px @ design kept clear of the area's edges
-
-        PAPER:      '#f4e2b4',
-        BORDER:     '#6b4423',
-        TITLE:      'WANTED',
-        TITLE_COLOR:'#8a1c10',
-        REWARD_COLOR:'#3b2412',
-
-        // THE INTRO, at a level's start.
-        INTRO: {
-            START_DELAY_MS: 150, // after the level's villains start to appear
-            STAGGER_MS:     150, // between one lane's card and the next
-            POP_MS:         320,
-            HOLD_MS:        1200,// all three up, before they go
-            OUT_MS:         280, // shrinking into the villain
-        },
-
-        // THE CATCH.
-        CATCH: {
-            DELAY_MS:   200,     // after the villain starts to go (with a
-                                 // getaway car: after it is blocked)
-            POP_MS:     260,
-            STAMP_MS:   220,     // the cross slamming onto the photo
-            HOLD_MS:    700,     // after the cross, before the next level can turn
-            SHRINK_MS:  300,     // (no getaway cars) shrinking to its badge
-            BADGE_SCALE: 0.8,    // (no getaway cars) the badge, as a share of the card
-            SHAKE_MS:   120,
-            SHAKE:      0,       // camera shake as the stamp lands (0 = none)
-            CROSS_COLOR:'#d32f2f',   // the cross over the photo
-            CUFF_COLOR: '#b8c0c8',
-            CUFF_DARK:  '#3a4048',
         },
     },
 
@@ -1275,6 +1101,7 @@ var CONFIG = {
         // SPIN_EASE is how quickly they get there (per second).
         SPIN_DEG_PER_SEC: 540,
         SPIN_EASE:        4,
+        DUST:             '#d9c3a0',   // the puffs at the tyres (a drop, a hop, a head start)
     },
 };
 
