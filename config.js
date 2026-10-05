@@ -7,13 +7,13 @@ function hexColor(cssColor) {
 }
 
 // ONE GETAWAY CAR DESIGN (CONFIG.VILLAIN.CAR.CARS): graphics/villain_car/
-// villain_car_NN.webp and villain_tyre_NN.webp, the body w x h, the tyre's
+// car_NN.webp and car_tyre_NN.webp, the body w x h, the tyre's
 // square size, each tyre's top-left [x, y] in the body, and the head (FACE).
 function getawayCarArt(n, w, h, tyre, rear, front, face) {
     const nn = String(n).padStart(2, '0');
     return {
-        BODY: `graphics/villain_car/villain_car_${nn}.webp`,
-        TYRE: `graphics/villain_car/villain_tyre_${nn}.webp`,
+        BODY: `graphics/villain_car/car_${nn}.webp`,
+        TYRE: `graphics/villain_car/car_tyre_${nn}.webp`,
         BODY_W: w, BODY_H: h, TYRE_SIZE: tyre,
         TYRES: [{ x: rear[0], y: rear[1] }, { x: front[0], y: front[1] }],
         FACE: Object.assign({ HEAD_FRAC: 0.55 }, face),
@@ -728,6 +728,30 @@ var CONFIG = {
                 getawayCarArt(5, 256, 100, 58, [28, 63], [173, 63], { X: 135, Y: 27, H: 36 }),   // teal classic
                 getawayCarArt(6, 256,  77, 56, [19, 39], [157, 39], { X: 112, Y: 17, H: 30 }),   // blue sports car
                 getawayCarArt(7, 256, 101, 54, [30, 67], [176, 67], { X: 143, Y: 30, H: 36 }),   // orange wagon
+                getawayCarArt(8, 256, 114, 60, [25, 75], [169, 75], { X: 138, Y: 34, H: 40 }),   // cream city car
+                getawayCarArt(9, 304, 102, 64, [38, 62], [216, 62], { X: 168, Y: 28, H: 38 }),   // red pickup
+                getawayCarArt(10, 307, 129, 64, [34, 85], [220, 85], { X: 214, Y: 42, H: 44 }),  // blue van
+                getawayCarArt(11, 288,  73, 49, [30, 43], [208, 43], { X: 150, Y: 18, H: 30 }),  // purple limo
+                getawayCarArt(12, 256, 150, 68, [30, 103], [162, 103], { X: 125, Y: 54, H: 50 }), // mint bubble car
+                getawayCarArt(13, 280,  81, 53, [32, 47], [196, 47], { X: 122, Y: 24, H: 34 }),  // red fastback
+                getawayCarArt(14, 256, 126, 65, [28, 82], [160, 82], { X: 122, Y: 39, H: 40 }),  // green off-roader
+                getawayCarArt(15, 256,  84, 48, [32, 52], [181, 52], { X: 138, Y: 22, H: 34 }),  // cream sedan
+                getawayCarArt(16, 256,  87, 58, [30, 52], [171, 52], { X: 118, Y: 25, H: 32 }),  // yellow coupe
+                getawayCarArt(17, 300, 125, 69, [28, 85], [205, 85], { X: 190, Y: 37, H: 44 }),  // blue minivan
+                getawayCarArt(18, 252,  66, 45, [36, 37], [178, 37], { X: 115, Y: 16, H: 28 }),  // maroon coupe
+                getawayCarArt(19, 256,  97, 56, [18, 57], [167, 57], { X: 112, Y: 24, H: 34 }),  // red hatchback
+                getawayCarArt(20, 270,  94, 54, [34, 60], [184, 60], { X: 158, Y: 23, H: 36 }),  // blue pickup
+                getawayCarArt(21, 256,  97, 45, [35, 67], [181, 67], { X: 145, Y: 27, H: 34 }),  // olive classic
+                getawayCarArt(22, 260,  73, 53, [34, 35], [175, 35], { X: 132, Y: 18, H: 28 }),  // orange sports car
+                getawayCarArt(23, 260,  89, 47, [35, 59], [185, 59], { X: 148, Y: 25, H: 34 }),  // grey estate
+                getawayCarArt(24, 280, 139, 65, [35, 97], [189, 97], { X: 168, Y: 45, H: 44 }),  // yellow van
+                getawayCarArt(25, 256,  94, 53, [27, 58], [177, 58], { X: 120, Y: 23, H: 36 }),  // teal hatchback
+                getawayCarArt(26, 256,  73, 47, [29, 44], [181, 44], { X: 140, Y: 17, H: 28 }),  // dark green sedan
+                getawayCarArt(27, 256,  94, 55, [26, 61], [180, 61], { X: 145, Y: 28, H: 36 }),  // red estate
+                getawayCarArt(28, 256,  93, 63, [17, 50], [185, 50], { X: 115, Y: 18, H: 28 }),  // purple hot rod
+                getawayCarArt(29, 256,  88, 56, [21, 53], [174, 53], { X: 137, Y: 22, H: 34 }),  // copper crossover
+                getawayCarArt(30, 256, 105, 53, [24, 72], [177, 72], { X: 142, Y: 33, H: 38 }),  // yellow taxi
+                getawayCarArt(31, 256,  77, 56, [26, 43], [178, 43], { X: 115, Y: 20, H: 28 }),  // navy coupe
             ],
         },
     },
@@ -761,6 +785,7 @@ var CONFIG = {
     // The player always wins: the figure only ever has to be run down.
     RACE: {
         RIVAL_AT:      0.62,     // where the rival holds while racing, share of the car area
+        RIVAL_END:     0.35,     // …eased back to as the lead runs out (the camera slides ahead, clearing the road in front), share of the car area
 
         // THE START: the drop-in, then the head start.
         DROP: {

@@ -1765,7 +1765,20 @@ class GameScene extends Phaser.Scene {
         const W = car.carW, eW = en.carW, home = car.homeX;
         const at = R.RIVAL_AT !== undefined ? R.RIVAL_AT : 0.62;
         const rivalAt = Math.max(home + (W + eW) / 2 + 0.2 * W, CA.x + CA.width * at);
-        return { home, rivalAt, meet: rivalAt + (eW - W) / 2, W, eW };
+        // AS THE LEAD RUNS OUT the rival's place eases back to RIVAL_END —
+        // the camera sliding ahead — so the overtake has the road in front.
+        const end = R.RIVAL_END !== undefined ? R.RIVAL_END : at;
+        const back = Math.max(0, rivalAt - Math.max(home + 0.5 * W, CA.x + CA.width * end));
+        return { home, rivalAt, meet: rivalAt + (eW - W) / 2, back, W, eW };
+    }
+
+    // How far the camera has slid ahead with `units` of lead left: none with
+    // the whole lead, all of m.back at none — eased at both ends, so it sets
+    // off and arrives (the noses meeting) at the road's own speed.
+    _raceSlide(i, m, units) {
+        const lane = this.lanes[i];
+        const f = lane.total > 0 ? 1 - Math.max(0, Math.min(1, units / lane.total)) : 1;
+        return (m.back || 0) * f * f * (3 - 2 * f);
     }
 
     // Where the piggy car stands on screen while racing, with `units` of lead
@@ -1791,8 +1804,10 @@ class GameScene extends Phaser.Scene {
             if (g) { rc.pw = g.carStop; rc.rw = g.enemyStop; }
         } else if (lane.surged) {
             rc.phase = 'race';
-            rc.rw = m.rivalAt;
-            rc.pw = this._raceCarAt(i, m, lane.track !== undefined ? lane.track : lane.left);
+            const units = lane.track !== undefined ? lane.track : lane.left;
+            const sl = this._raceSlide(i, m, units);
+            rc.rw = m.rivalAt - sl;
+            rc.pw = this._raceCarAt(i, m, units) - sl;
             rc.vp = rc.vr = V;
         }
         if (!enter) car.x = rc.pw;
@@ -2059,8 +2074,9 @@ class GameScene extends Phaser.Scene {
                 const p0 = rc.pw;
                 rc.vr = V;
                 rc.rw += V * dt;
-                target = rc.rw - m.rivalAt;
-                rc.pw = target + this._raceCarAt(i, m, lane.track);
+                const sl = this._raceSlide(i, m, lane.track);
+                target = rc.rw - m.rivalAt + sl;
+                rc.pw = target + this._raceCarAt(i, m, lane.track) - sl;
                 rc.vp = dt > 0 ? (rc.pw - p0) / dt : V;
                 if (lane.closing && lane.track <= 0) {
                     // (Its speed is the glide's — not this last part-frame's.)

@@ -58,8 +58,8 @@ function sharedAssets() {
     A.image('cell_noise', 'graphics/ui/merge-grid/cell_noise.webp');
     // The car: a right-facing body and the one tyre, used twice per car
     // (see CONFIG.CAR / _makeCar).
-    A.image('car_body', 'graphics/hero_car/hero_car_01.webp');
-    A.image('car_tyre', 'graphics/hero_car/hero_tyre_01.webp');
+    A.image('car_body', 'graphics/hero_car/car_01.webp');
+    A.image('car_tyre', 'graphics/hero_car/car_tyre_01.webp');
     // The getaway cars — each design's body and tyre (CONFIG.VILLAIN.CAR.CARS).
     ((((CONFIG.VILLAIN || {}).CAR) || {}).CARS || []).forEach((c, i) => {
         A.image(getawayBodyKey(i + 1), c.BODY);
