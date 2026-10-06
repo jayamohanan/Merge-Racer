@@ -1019,6 +1019,14 @@ class GameScene extends Phaser.Scene {
 
         // Everything the opening view needs is up.
         finishLoadingScreen();
+
+        // ?cartest: the car test overlay. DEV ONLY — dev/ is not in the build.
+        if (/[?&]cartest\b/.test(location.search)) {
+            const s = document.createElement('script');
+            s.src = 'dev/carTest.js';
+            s.onload = () => window.carTest(this);
+            document.head.appendChild(s);
+        }
     }
 
     // The layout's figures, copied onto the scene where the rest of the code
