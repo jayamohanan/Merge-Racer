@@ -1991,11 +1991,15 @@ class GameScene extends Phaser.Scene {
         const R = CONFIG.RACE || {}, Z = R.ZOOM || {}, v = (x, d) => (x !== undefined ? x : d);
         const dt = Math.min(delta, 50) / 1000;
         this._zoomFilter();
-        // THE GREEN FIGURE climbs at its piggy's rate until frozen.
+        // THE GREEN FIGURE climbs by its piggy's value each second, in steps
+        // as the ticks did, until frozen.
         (this.lanes || []).forEach((lane, i) => {
             const ah = lane.ahead;
             if (!ah || ah.frozen) return;
-            ah.v += ah.rate * dt;
+            ah.t = (ah.t || 0) + dt;
+            if (ah.t < 1) return;
+            ah.t -= 1;
+            ah.v += ah.rate;
             this._setLaneLabel(i);
         });
         (this.lanes || []).forEach((lane, i) => {
@@ -2065,6 +2069,10 @@ class GameScene extends Phaser.Scene {
                     f.a = rc.vp * rc.vp / (2 * Math.max(1, f.pS - rc.pw));
                 }
                 if (f.braking) rc.vp = Math.max(0, rc.vp - f.a * dt);
+                // TILL ITS NOSE IS ON THE LINE it keeps pulling away: its
+                // speed over the rival's grows (FINISH_ACCEL), so no finish
+                // is a photo finish.
+                else if (!f.won) rc.vp += v(R.FINISH_ACCEL, 100) * this.layoutConfig.platformScale * dt;
                 rc.pw += rc.vp * dt;
                 if (f.braking && (rc.vp <= 0 || rc.pw >= f.pS)) { rc.pw = f.pS; rc.vp = 0; }
                 // THE RIVAL keeps V till it has finished — its nose over the
@@ -2363,7 +2371,7 @@ class GameScene extends Phaser.Scene {
 
         const W = Math.min(CA.width * 0.86, v(K.W, 440) * sc), rowH = v(K.ROW_H, 40) * sc;
         const pad = 12 * sc, titleH = 44 * sc, footH = champ || nextR === null ? 0 : 34 * sc;
-        const slots = champ ? 0 : (newR > 1 ? 1 : 0) + 1 + (hasGap ? 1 : 0) + 1;
+        const slots = champ ? 0 : (newR > 1 ? 1 : 0) + 1 + (hasGap ? 2 : 1);
         const H = pad * 2 + titleH + slots * rowH + footH;
         const panel = this.add.container(CA.x + CA.width / 2, CA.y + CA.height / 2).setDepth(v(K.DEPTH, 40));
         this._rankPanel = panel;
@@ -2393,23 +2401,36 @@ class GameScene extends Phaser.Scene {
             c.rankText = rt;
             return c;
         };
-        let you = null;
-        const moves = [];   // [row, fromSlot, toSlot]
+        // EVERY RACER PASSED: one row per rank from just above the new rank
+        // down to just above the old one. As the player's rank `s` counts
+        // down, the list scrolls past YOU and each racer drops a place as it
+        // is passed. YOU goes from the bottom slot to its final one. Rows
+        // fade at the window's edges (no masks in this build).
+        let you = null, place = null;
         if (!champ) {
-            let k = 0;
-            if (newR > 1) { const a = row(newR - 1, this._racerName(newR - 1), false); a.y = slotY(k++); panel.add(a); }
-            const top = k;
-            const rival = row(newR, this._racerName(newR), false);
-            panel.add(rival); moves.push([rival, top, top + 1]);
-            let gap = null;
-            if (hasGap) {
-                gap = this.add.text(0, 0, '• • •', font(20, K.GAP_COLOR || '#a08560')).setOrigin(0.5);
-                panel.add(gap); moves.push([gap, top + 1, top + 2]);
+            const top = newR > 1 ? 1 : 0;
+            const others = [];
+            for (let r = Math.max(1, newR - 1); r < oldR; r++) {
+                const o = row(r, this._racerName(r), false);
+                o.rank = r; o.shown = r;
+                panel.add(o); others.push(o);
             }
             you = row(oldR, K.YOU || 'YOU', true);
-            panel.add(you); moves.push([you, slots - 1, top]);
-            for (const [o, a] of moves) o.y = slotY(a);
-            rival.after = newR + 1;
+            panel.add(you);
+            place = (s) => {
+                const ys = top + (slots - 1 - top) * (s - newR) / Math.max(1, oldR - newR);
+                you.y = slotY(ys);
+                you.rankText.setText('#' + this._bigNum(Math.round(s)));
+                for (const o of others) {
+                    const k = ys + o.rank - s + Math.min(1, Math.max(0, o.rank + 1 - s));
+                    const out = Math.max(0, -k, k - (slots - 1));
+                    o.setVisible(out < 0.5).setAlpha(Math.max(0, 1 - out * 2));
+                    o.y = slotY(k);
+                    const shown = s > o.rank + 0.5 ? o.rank : o.rank + 1;
+                    if (shown !== o.shown) { o.shown = shown; o.rankText.setText('#' + this._bigNum(shown)); }
+                }
+            };
+            place(oldR);
         }
         if (footH) {
             panel.add(this.add.text(0, H / 2 - pad - footH / 2,
@@ -2422,12 +2443,7 @@ class GameScene extends Phaser.Scene {
         const outMs = v(K.OUT_MS, 220), slideAt = popMs + v(K.SLIDE_DELAY_MS, 120);
         panel.setScale(0.9).setAlpha(0);
         this.tweens.add({ targets: panel, scale: 1, alpha: 1, duration: popMs, ease: 'Back.easeOut' });
-        const settle = () => {
-            for (const [o, , b] of moves) { this.tweens.killTweensOf(o); o.y = slotY(b); }
-            if (you) you.rankText.setText('#' + this._bigNum(newR));
-            const rv = moves[0] && moves[0][0];
-            if (rv && rv.rankText) rv.rankText.setText('#' + this._bigNum(rv.after));
-        };
+        const settle = () => { if (place) place(newR); };
         let closed = false;
         const timers = [];
         const close = () => {
@@ -2442,11 +2458,8 @@ class GameScene extends Phaser.Scene {
         };
         let counter = null;
         if (!champ) {
-            for (const [o, a, b] of moves) {
-                this.tweens.add({ targets: o, y: slotY(b), delay: slideAt, duration: slideMs, ease: 'Cubic.easeInOut' });
-            }
             counter = this.tweens.addCounter({ from: oldR, to: newR, delay: slideAt, duration: slideMs, ease: 'Cubic.easeOut',
-                onUpdate: (tw) => you.rankText.setText('#' + this._bigNum(Math.round(tw.getValue()))),
+                onUpdate: (tw) => place(tw.getValue()),
                 onComplete: () => {
                     settle();
                     this.tweens.add({ targets: you, scale: 1.06, duration: 120, yoyo: true, ease: 'Quad.easeOut' });

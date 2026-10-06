@@ -770,6 +770,7 @@ var CONFIG = {
         // speed — is picked afresh per lane, so finishes differ: short is
         // close, long a clear win with the rival well back.
         AHEAD_MS:      [700, 2200],
+        FINISH_ACCEL:  100,      // from the noses meeting till its nose is on the line, the piggy car keeps gaining speed on the rival, px/s² @ design
         CAM: {
             DRIFT_S:   0.4,      // after the noses meet, the piggy car's lead over the rival on screen fades over about this (s)
         },
