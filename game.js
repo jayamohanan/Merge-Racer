@@ -2048,6 +2048,9 @@ class GameScene extends Phaser.Scene {
                     rc.vp = V + (lane.overRate || 0) * (m.meet - m.home) / Math.max(1, lane.total);
                     lane.closing = false;
                     lane.track = undefined;
+                    // The camera on this frame's mark first: the finish takes
+                    // the car's place on screen (P0) from it.
+                    rc.cam = target;
                     this._raceFinish(i);
                 }
                 break;
