@@ -82,17 +82,8 @@ var CONFIG = {
         SEPARATOR:   '',    // digit grouping, e.g. ',' for 50,000; '' for none
     },
 
-    RESET_PROGRESS: false,
     DEBUG_HALF_LINE: false,  // draw a line splitting partA / partB (vertical in
                              // landscape, horizontal in portrait)
-    // White lattice over the farm half, on the TILE boundaries — so it shows
-    // where tiles actually are, not just where 22x20 cells would fall. It is
-    // world content, so it scrolls with the band and stays welded to the tiles.
-    // Columns come from the map's own width; rows are anchored to the map's grid
-    // and continued in both directions to fill the visible band.
-    DEBUG_PERF: false,        // log object / tween / timer / texture counts each
-                             // time the world rebases (once per level). Climbing
-                             // numbers = something is outliving its band
     DEBUG_LAYOUT: false,     // log the canvas size, the layout's numbers and
                              // the camera split once at startup: [buffer],
                              // [layout], [camB], and the battery sprite count
@@ -122,7 +113,6 @@ var CONFIG = {
     ECONOMY: {
         SPAWN_COST_PER_LEVEL: 25,    // a spawn costs this × the spawn level
     },
-    BATTERY_IMAGE_EXTENSIONS: ['webp'],
 
      BACKGROUND: {
         // MATCHED TO THE CAR AREA'S GROUND — partB (the car area) has no
@@ -257,21 +247,12 @@ var CONFIG = {
     BUTTON: {
         SPAWN_WIDTH: 250,
         SPAWN_HEIGHT: 90,
-        LEVELUP_WIDTH: 180,
-        LEVELUP_HEIGHT: 70,
         BOTTOM_PADDING: 70,
-        BUTTON_SPACING: 220,
         BATTERY_ICON_WIDTH: 64,
-        BATTERY_ICON_HEIGHT: 64,
         BATTERY_ICON_X: -80,
-        BATTERY_ICON_Y: 0,
-        COIN_TEXT_SIZE: '32px',
         COIN_TEXT_X: 20,
-        COIN_TEXT_Y: 0,
         COIN_ICON_WIDTH: 50,
-        COIN_ICON_HEIGHT: 50,
         COIN_ICON_X: 80,
-        COIN_ICON_Y: 0,
     },
 
     AD: {
@@ -296,15 +277,11 @@ var CONFIG = {
     },
 
     COIN_COUNTER: {
-        ALIGN_WITH_GRID_ROW: 1,
-        PADDING_FROM_SCREEN_RIGHT: 20,
         TEXT_SIZE: '48px',
         TEXT_COLOR: '#f7ca42',
         TEXT_STROKE_COLOR: '#7e5d11',
         TEXT_STROKE_THICKNESS: 6,
         COIN_ICON_WIDTH: 40,
-        COIN_ICON_HEIGHT: 40,
-        TEXT_ICON_SPACING: 10,
     },
 
     CELL: {
@@ -364,9 +341,7 @@ var CONFIG = {
         // at the same scale rather than being squeezed in. See fitItemIcon.
         ICON_PIG_PX: 128,
         BATTERY_DISPLAY_SIZE: 64,
-        BATTERY_SCALE: 1.0,
         BATTERY_Y_OFFSET: 5,
-        LEVEL_TEXT_SIZE: '11px',
         // A NEAR-BLACK, not pure black — softer contrast, and the same warm
         // dark brown already used for label strokes elsewhere (LABEL_STROKE,
         // CROPS.YIELD_LABEL.STROKE) rather than a second dark tone.
@@ -457,7 +432,6 @@ var CONFIG = {
 
     MERGE_TUTORIAL: {
         ENABLED: true,                 // the swap-to-merge hand animation
-        POINTER_OFFSET_Y: 50,
         ANIMATION_DURATION: 1000,
         ANIMATION_REPEAT: -1,
         ANIMATION_EASE: 'Sine.easeInOut',
@@ -495,14 +469,6 @@ var CONFIG = {
         // IT CROSSES THE CASE'S TOP EDGE rather than hovering above it. Ending
         // outside the slot leaves the arrow pointing at a boundary; driving it
         // INTO the slot is what says "in here" rather than "down there".
-        //
-        // START and DISTANCE, not start and end. They used to be coupled — the
-        // start was measured back from the end — so shortening the stroke moved
-        // the arrow's resting place instead of its reach, which is the opposite
-        // of what shortening a stroke should do.
-        START_ABOVE: 0.209,  // where it begins, in slot heights ABOVE the case's
-                             // top edge. Clamped so it never starts off-screen,
-                             // which happens when the slots sit high in the panel
         TRAVEL:      0.193,  // how far it travels down, in slot heights.
                              // Trimmed evenly at both ends — 15% of the run off
                              // each — so the stroke shrank about its own middle
@@ -538,7 +504,6 @@ var CONFIG = {
         SPEED_VARIATION: 0.15,
         STAGGER_DELAY: 50,
         INITIAL_STACK_OFFSET: 0,
-        DELAY_BEFORE_FLY: 100,        // ms to wait after gadget disappears before coins fly
         EASE: 'Power2',
         PUNCH:    0.16,                // how hard the counter's icon knocks back
         PUNCH_MS: 110,                 // as each coin lands
@@ -601,18 +566,6 @@ var CONFIG = {
         CHARGE_RATE_GAP: 2,            // gap (px) between the slot's edge and
                                        // the charge-rate figure. The font's
                                        // own padding adds to this on screen
-
-        // NO LONGER READ: the slot's figure now takes VILLAIN.LABEL's look, the
-        // same as the lead over the cars (see createSlots). Kept for reference.
-        // The rate on each slot. Was black type on a white outline — the one
-        // place in the game that ran that way round — which put it at odds with
-        // the sum beside it and with every other readout. White on dark, like
-        // the rest.
-        SLOT_RATE: {
-            COLOR:    '#000000',
-            STROKE:   '#ffffff',
-            STROKE_W: 0,           // no outline
-        },
     },
 
     // ── THE ROAD ─────────────────────────────────────────────────────────────
@@ -631,6 +584,7 @@ var CONFIG = {
         SPEED:       420,        // px/s @ design the marks slide at, full speed
         PERIOD:      420,        // px @ design before the pattern of marks repeats
         MARKS:       8,          // marks in one period
+        DEBUG_REPEAT: true,      // TEMP: bars under each road over the stretch seen twice (left) and its copy one PERIOD on (right)
         DEPTH:       3.8,        // under the cars
 
         // THE BUMPS: smooth rises in the road, H px high and W px long
@@ -667,17 +621,11 @@ var CONFIG = {
     VILLAIN: {
         DIR:   'graphics/villain/',
         FILES: ['villain_01.webp', 'villain_02.webp', 'villian_03.webp'],
-        X_FRAC:        0.7,      // its home: its middle, across the free space right of the cars
-        EDGE_PAD:      12,       // px @ design kept clear of the screen's right edge
         DEPTH:         4,
         PAYOUT_MULT:   1,        // coins = its lead × this (levels 1–2 are flat)
 
         NEXT_LEVEL_MS: 900,      // (no rank panel) pause after the last win before the next level
         ENTER_MS:      400,      // a new level: the piggy cars roll back to the line in this + 200
-
-        // Each tick's move is spread over DRIVE_MS so the cars roll rather
-        // than jump.
-        DRIVE_MS:   1000,     // = the tick, so each roll runs into the next: no pause between
 
         // THE LEAD FIGURE over each lane (placed by RACE.LEAD).
         LABEL: {
@@ -784,6 +732,7 @@ var CONFIG = {
     //
     // The player always wins: the figure only ever has to be run down.
     RACE: {
+        DEBUG_PHASE:   true,     // TEMP: show each lane's race phase over the piggy car's start spot
         RIVAL_AT:      0.62,     // where the rival holds while racing, share of the car area
         RIVAL_END:     0.35,     // …eased back to as the lead runs out (the camera slides ahead, clearing the road in front), share of the car area
 
@@ -1107,12 +1056,11 @@ var CONFIG = {
         // Sized to WIDTH_FRAC of the car area's width, but never taller (ground
         // to roof) than MAX_H_FRAC of a slot. Its LEFT edge sits LEFT_GAP px
         // (@ design) into the car area — close beside its slot, which is
-        // CAR_AREA.SLOT_COLUMN_GAP away — so the space to its right is free for
-        // the villains (GameScene.villainArea).
+        // CAR_AREA.SLOT_COLUMN_GAP away.
         WIDTH_FRAC: 0.45,
         // …and then scaled by this, whatever capped it above — 0.8 is 20%
-        // smaller. The car shrinks toward its slot; the villains keep the size
-        // and place the full-size car gives them.
+        // smaller. The car shrinks toward its slot; the rival car is drawn at
+        // the same pixel scale (VILLAIN.CAR.SCALE).
         SCALE:      0.8,
         MAX_H_FRAC: 1,
         LEFT_GAP:   0,

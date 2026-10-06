@@ -202,7 +202,6 @@ class GameScene extends Phaser.Scene {
 
         this.CELL_SIZE  = CONFIG.CELL.SIZE;
         this.CELL_GAP   = CONFIG.CELL.GAP;
-        this.CELL_RADIUS= CONFIG.CELL.RADIUS;
         this.GRID_COLS  = 3;
         this.GRID_ROWS  = 3;
 
@@ -213,7 +212,6 @@ class GameScene extends Phaser.Scene {
         // How far the slots have driven, in metres — the run's progress.
         this.distance          = 0;
         this.carArea           = null;   // the empty rect right of the slots
-        this.villainArea       = null;   // …and what the cars leave of it
         this.cars              = [];     // one per slot, on its slot's road line
         this.steeringItems     = [];     // slot piggies whose wheels turn
         // ── The level: one race per lane ─────────────────────────────────
@@ -237,9 +235,6 @@ class GameScene extends Phaser.Scene {
         // Layout state for responsive design
         this.isPortrait         = true;  // Detected in create()
         this.layoutConfig       = {};    // Will store calculated layout values
-        this.platformsContainer = null;
-        this.gridContainer      = null;
-        this.uiContainer        = null;
     }
 
     // ================================================================
@@ -338,7 +333,6 @@ class GameScene extends Phaser.Scene {
 
         // SIZES — uniform `scale`
         const panPad           = Math.floor(panPadRef * scale);
-        const spawnBtnLogHalf  = spawnBtnLogHalfRef * scale;        // button half-height is a SIZE
         const spawnBtnDisplayH = Math.floor((CONFIG.BUTTON.SPAWN_HEIGHT + 30) * scale);
         const panW             = COLS * cellSize + (COLS - 1) * GAP + 2 * panPad;
         const spawnBtnDisplayW = Math.min(
@@ -493,18 +487,13 @@ class GameScene extends Phaser.Scene {
         const coinTextSize       = Math.max(12, Math.round(29 * 1.3 * scale)) + 'px';   // 40% down from 48, then 30% back up
         const coinTextIconGap    = Math.max(3,  Math.round(5 * scale));
 
-        // Drawing geometry — cell and slot borders/radii
-        const cellInset         = Math.max(1, Math.floor(CONFIG.CELL.INSET_BORDER_WIDTH * scale));
-        const cellRadius        = Math.round(CONFIG.CELL.RADIUS * scale);
-
         // VFX sizes
-        const mergeEffectRadius = Math.round(50 * scale);
         const rewardCoinSize    = Math.round(CONFIG.COIN_REWARD_ANIMATION.REWARD_COIN_SIZE * scale);
 
         this.layoutConfig = {
-            screenWidth: W, screenHeight: H, isPortrait: isP,
+            isPortrait: isP,
             cellSize, cellGap,
-            panPad, spawnBtnDisplayH, spawnBtnDisplayW, spawnBtnLogicalHalf: spawnBtnLogHalf,
+            panPad, spawnBtnDisplayH, spawnBtnDisplayW,
             partA, partB,
             platformScale,
             sW, sH, scale: baseScale, colScale: scale,
@@ -517,21 +506,8 @@ class GameScene extends Phaser.Scene {
             spawnBattIconX, spawnBattIconSize,
             // Coin counter
             coinIconSize, coinTextSize, coinTextIconGap,
-            // Drawing geometry
-            cellInset, cellRadius,
             // VFX
-            mergeEffectRadius, rewardCoinSize,
-            // Legacy compat fields
-            gridLeft:         partA.x,
-            gridWidth:        partA.width,
-            gridCenterX:      partA.x + partA.width / 2,
-            gridTop:          partA.y,
-            gridHeight:       partA.height,
-            platformsLeft:    partB.x,
-            platformsWidth:   partB.width,
-            platformsCenterX: partB.x + partB.width / 2,
-            platformsTop:     partB.y,
-            platformsHeight:  partB.height,
+            rewardCoinSize,
         };
     }
 
@@ -883,7 +859,6 @@ class GameScene extends Phaser.Scene {
         // fails is not retried forever: it is written off, and the level builds
         // without it — the same as a missing file always did.
         this._artFailed = new Set();
-        this._artQueued = new Set();
         this.load.on('loaderror', (file) => { if (file && file.key) this._artFailed.add(file.key); });
 
         // SHARED ART — the merge grid, the machine, the lake, the UI. The list
@@ -1045,12 +1020,7 @@ class GameScene extends Phaser.Scene {
         this.batteryYOffset     = L.batteryYOffset;
         this.levelTextYOffset   = L.levelTextYOffset;
         this.levelTextSize      = L.levelTextSize;
-        // Drawing geometry
-        this.CELL_RADIUS        = L.cellRadius;
-        this.cellInset          = L.cellInset;
-        this.platformScale      = L.platformScale;
         // VFX
-        this.mergeEffectRadius  = L.mergeEffectRadius;
         this.rewardCoinSize     = L.rewardCoinSize;
     }
 
@@ -1163,33 +1133,22 @@ class GameScene extends Phaser.Scene {
     // ================================================================
     // One per slot, standing on the line through that slot's bottom edge — the
     // road, which is not drawn. Sized to the car area's width, capped by the
-    // slot's height, and parked close beside its slot (see CONFIG.CAR).
-    //
-    // WHAT IS LEFT FOR THE VILLAINS: everything right of the cars' front ends,
-    // kept as this.villainArea.
+    // slot's height, then scaled by SCALE, and parked close beside its slot
+    // (see CONFIG.CAR).
     _buildCars() {
         const C = CONFIG.CAR || {};
         const A = this.carArea;
-        this.villainArea = A;
         if (!A || !A.width) return;
         const v = (x, d) => (x !== undefined ? x : d);
         const bodyW = v(C.BODY_W, 254);
         const carH  = this._carGround();   // ground to roof, art px
         const left  = A.x + v(C.LEFT_GAP, 0) * this.layoutConfig.platformScale;
-        let right = left;
         this.cars = this.platforms.map((p) => {
-            // FULL SIZE first — what the villains are measured against and
-            // where their space starts — then the car itself at SCALE of it.
-            const full = Math.min(A.width * v(C.WIDTH_FRAC, 0.45) / bodyW * carH,
-                                  p.slotSize * v(C.MAX_H_FRAC, 1));
-            right = Math.max(right, left + full / carH * bodyW);
-            const h = full * v(C.SCALE, 1);
+            const h = Math.min(A.width * v(C.WIDTH_FRAC, 0.45) / bodyW * carH,
+                               p.slotSize * v(C.MAX_H_FRAC, 1)) * v(C.SCALE, 1);
             const w = h / carH * bodyW;
-            const car = this._makeCar(left + w / 2, p.slotY + p.slotSize / 2, h);
-            car.fullH = full;
-            return car;
+            return this._makeCar(left + w / 2, p.slotY + p.slotSize / 2, h);
         });
-        this.villainArea = { x: right, y: A.y, width: Math.max(0, A.x + A.width - right), height: A.height };
     }
 
     // Where the tyres meet the ground, in the body's own pixels: the lowest
@@ -1313,8 +1272,8 @@ class GameScene extends Phaser.Scene {
         this.roadGfx = null;
         const V  = CONFIG.VILLAIN || {}, LB = V.LABEL || {};
         const v  = (x, d) => (x !== undefined ? x : d);
-        const L  = this.layoutConfig, A = this.villainArea;
-        if (!A || !this.lanes) return;
+        const L  = this.layoutConfig;
+        if (!this.carArea || !this.lanes) return;
         const key = villainKey(villainIndexFor(this.level));
         const sc  = L.platformScale;
 
@@ -1447,6 +1406,16 @@ class GameScene extends Phaser.Scene {
             for (let x = x0 + step; x < xEnd; x += step) g.lineTo(x, y - heightAt(x));
             g.lineTo(xEnd, y - heightAt(xEnd));
             g.strokePath();
+
+            // TEMP (ROAD.DEBUG_REPEAT): the stretch shown twice — at the left,
+            // and again one PERIOD on, at the right edge.
+            const ov = xEnd - x0 - period;
+            if (R.DEBUG_REPEAT && ov > 0) {
+                const by = y + 16 * sc;
+                g.lineStyle(4 * sc, 0xff3b3b, 1);
+                g.lineBetween(x0, by, x0 + ov, by);
+                g.lineBetween(xEnd - ov, by, xEnd, by);
+            }
 
             // THE MARKS, every period across the lane, slid back by the offset.
             for (let base = x0 - period; base < xEnd + period; base += period) {
@@ -1611,16 +1580,13 @@ class GameScene extends Phaser.Scene {
         return this.textures.exists(spec.bodyKey) && this.textures.exists(spec.tyreKey) ? spec : null;
     }
 
-    // LANE i's GETAWAY CAR: the piggy car's body, tinted, the villain's head
-    // in the driver's window — standing on the road at `ground` where the
-    // villain would, behind the piggy car. Sized like a container image of
-    // the car (setSize), so displayWidth / displayHeight read as they do for
-    // a villain picture, and the code that measures villains measures it.
+    // LANE i's RIVAL CAR: the level's design, the rival's head in the
+    // driver's window — standing on the road at `ground`, behind the piggy
+    // car. Its x is set by the race (_raceSetup).
     _makeGetawayCar(i, ground, key) {
-        const V = CONFIG.VILLAIN || {}, K = V.CAR || {};
+        const K = (CONFIG.VILLAIN || {}).CAR || {};
         const v = (x, d) => (x !== undefined ? x : d);
-        const A = this.villainArea, car = this.cars[i], p = this.platforms[i];
-        const sc = this.layoutConfig.platformScale;
+        const car = this.cars[i], p = this.platforms[i];
         // THE LEVEL'S CAR DESIGN (CARS, a new one each level), or the
         // piggy car's own art if none is loaded.
         const spec = this._getawaySpec();
@@ -1630,8 +1596,6 @@ class GameScene extends Phaser.Scene {
         // lower, longer car comes out lower and longer, not stretched to match.
         const k  = (car ? car.scaleX : p.slotSize / gy) * v(K.SCALE, 1);
         const en = this._makeCar(0, ground, gy * k, C).setDepth(v(K.DEPTH, 3.9));
-        en.setSize(bw, gy);
-        en.isCar = true;
         if (K.TINT) en.bodyImg.setTint(hexColor(K.TINT));
 
         // THE DRIVER: the top of the villain's picture — its head — in the window.
@@ -1652,13 +1616,6 @@ class GameScene extends Phaser.Scene {
             // next look at the first milestone the lane has not yet passed.
             en.peek = { v: 0, want: 0, t: 0, up: false, mi: this._nextMilestone(i) };
         }
-
-        // WHERE THE VILLAIN WOULD STAND; past the area's right edge rather
-        // than over the piggy car if the area is too narrow — just in sight.
-        const pad = v(V.EDGE_PAD, 12) * sc, w = en.carW;
-        en.x = en.homeX = Math.max(A.x + pad + w / 2,
-            Math.min(A.x + A.width * v(V.X_FRAC, 0.7), A.x + A.width - pad - w / 2));
-        en.baseScale = en.scaleX;
         return en;
     }
 
@@ -1687,7 +1644,7 @@ class GameScene extends Phaser.Scene {
         const P = ((CONFIG.VILLAIN || {}).CAR || {}).PEEK || {}, v = (x, d) => (x !== undefined ? x : d);
         const dt = Math.min(delta, 50) / 1000, S = P.SHOW || [0.8, 1.6];
         this.villains.forEach((en, i) => {
-            if (!en || !en.isCar || !en.face || !en.peek || !en.scene) return;
+            if (!en || !en.face || !en.peek || !en.scene) return;
             const pk = en.peek, lane = this.lanes && this.lanes[i];
             const M = P.AT || [];
             if (P.ENABLED === false || (lane && lane.caught)) pk.want = 1;
@@ -2161,6 +2118,21 @@ class GameScene extends Phaser.Scene {
                 if (bd[1] && bd[1].scene) bd[1].x = en.x + bd[1].dx;
             }
             this.roadOffsets[i] = Math.max(0, rc.road0 + rc.cam);
+
+            // TEMP (RACE.DEBUG_PHASE): the lane's phase, over the piggy car's
+            // start spot.
+            if (R.DEBUG_PHASE) {
+                const pt = this._phaseTexts || (this._phaseTexts = []);
+                const sc = this.layoutConfig.platformScale;
+                if (!pt[i] || !pt[i].scene) {
+                    pt[i] = this._onRoad(this.add.text(0, 0, '', {
+                        fontSize: Math.max(10, Math.round(16 * sc)) + 'px', fontFamily: CONFIG.FONT_FAMILY,
+                        color: '#ffffff', stroke: '#000000', strokeThickness: Math.round(3 * sc),
+                    })).setOrigin(0.5, 1).setDepth(6);
+                }
+                const p = this.platforms[i];
+                pt[i].setText(rc.phase).setPosition(m.home, p.slotY + p.slotSize / 2 - car.carH - 4 * sc);
+            }
         });
     }
 
@@ -3026,22 +2998,6 @@ class GameScene extends Phaser.Scene {
         this._hideSlotHint(slotIndex);
     }
 
-    removeBatteryFromSlot(slotIndex) {
-        if (slotIndex < 0 || slotIndex >= 3) return;
-        if (!this.chargingSlots[slotIndex]) return;
-        const slot = this.chargingSlots[slotIndex];
-        const bd   = slot.batteryData;
-        const p    = this.platforms[slotIndex];
-        if (bd && bd.draggableBg) { bd.draggableBg.destroy(); bd.draggableBg = null; }
-        if (p.batterySprite)    p.batterySprite.destroy();
-        if (p.batteryLevelText) p.batteryLevelText.destroy();
-        p.batterySprite = p.batteryLevelText = null;
-        p.slotBg.setVisible(true);
-        p.slotBgFilled.setVisible(false);
-        p.chargeRateText.setVisible(false);
-        this.chargingSlots[slotIndex] = null;
-    }
-
     // ================================================================
     // CHARGING
     // ================================================================
@@ -3218,16 +3174,6 @@ class GameScene extends Phaser.Scene {
             g.fillStyle(pc, pa * (1 - a));
             g.fillCircle(q.x, q.y, q.r * (1 + 1.5 * a));
         }
-    }
-
-    // The distance the slots cover per second — the sum of the three.
-    _slotPower() {
-        let total = 0;
-        for (let i = 0; i < 3; i++) {
-            const slot = this.chargingSlots[i];
-            if (slot) total += slot.distPerSec;
-        }
-        return total;
     }
 
 
@@ -4579,8 +4525,6 @@ class GameScene extends Phaser.Scene {
 // ================================================================
 // PHASER CONFIG + BOOT
 // ================================================================
-const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
 // [orient] console lines — CONFIG.DEBUG_ORIENTATION.
 function orientLog(msg) {
     if (typeof CONFIG !== 'undefined' && CONFIG.DEBUG_ORIENTATION) console.log(`[orient] ${msg}`);
