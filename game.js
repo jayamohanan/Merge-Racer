@@ -77,9 +77,9 @@ class AssetManager {
     }
 
     // THE PIGGY WITH ITS WHEEL ON, baked into one canvas texture the size of
-    // the piggy — the wheel at ITEM_ART.WHEEL_AT, scaled with the piggy if the
-    // art is not the reference size. Needs both pictures in hand; returns
-    // whether the texture now exists.
+    // the piggy, or bigger where the wheel runs past it — the wheel at
+    // ITEM_ART.WHEEL_AT, scaled with the piggy if the art is not the reference
+    // size. Needs both pictures in hand; returns whether the texture now exists.
     composeBattery(iconLvl) {
         const T = this.scene.textures;
         const key = `battery${iconLvl}`;
@@ -89,7 +89,9 @@ class AssetManager {
         const pig = T.get(pk).getSourceImage(), wheel = T.get(wk).getSourceImage();
         const at = ITEM_ART.WHEEL_AT;
         const kx = pig.width / ITEM_ART.REF_W, ky = pig.height / ITEM_ART.REF_H;
-        const canvas = T.createCanvas(key, pig.width, pig.height);
+        const cw = Math.max(pig.width,  Math.ceil((at.x + at.size) * kx));
+        const ch = Math.max(pig.height, Math.ceil((at.y + at.size) * ky));
+        const canvas = T.createCanvas(key, cw, ch);
         if (!canvas) return false;
         const ctx = canvas.getContext();
         ctx.drawImage(pig, 0, 0);

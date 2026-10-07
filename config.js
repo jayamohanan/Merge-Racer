@@ -106,7 +106,7 @@ var CONFIG = {
         BATCH:    4,        // icons per tick, so ~4.5 per second at the default
     },
 
-    BATTERY_START_LEVEL: 1,
+    BATTERY_START_LEVEL: 50,
     // Coins a new run starts with. Default 2500; raise it to debug later levels.
     START_COINS: 2500,
     // THE ECONOMY. Coins come from catching villains — see levelData.js.
@@ -1084,7 +1084,7 @@ var CONFIG = {
 // WHICH OF THE 90 PICTURES a level shows (one per steering wheel — see
 // ITEM_ART). Past the last one it WRAPS, not clamps — level 91 shows level 1's
 // picture again, and so on forever. The piggy inside the picture loops on its
-// own every 28 (itemPiggyIndex). This is the one place that
+// own every 14 (itemPiggyIndex). This is the one place that
 // decision is made: everywhere else that draws a pig's icon calls this first
 // (see AssetManager and every dressWhenReady call site in game.js), so a
 // change here is a change everywhere at once.

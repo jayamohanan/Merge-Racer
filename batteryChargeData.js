@@ -23,13 +23,14 @@
 // ==================================================================================
 var ITEM_ART = {
     // file name = prefix + number (zero-padded to `pad`) + '.' + ext
-    PIGGY: { folder: 'piggy',    prefix: 'item_',     count: 28, ext: 'webp', pad: 2 },
+    PIGGY: { folder: 'piggy',    prefix: 'piggy_',    count: 14, ext: 'webp', pad: 2 },
     WHEEL: { folder: 'st_wheel', prefix: 'st_wheel_', count: 90, ext: 'webp', pad: 2 },
     // Where the wheel goes, in the PIGGY's own pixels — its top-left corner
     // and its size — for a piggy of REF_W × REF_H. Art of another size is
-    // scaled to match.
-    REF_W: 156,
-    REF_H: 136,
+    // scaled to match. The wheel runs past the piggy's right edge; the baked
+    // texture grows to hold it (composeBattery).
+    REF_W: 128,
+    REF_H: 128,
     WHEEL_AT: { x: 82, y: 61, size: 64 },
 };
 
@@ -149,7 +150,7 @@ function _itemFile(art, n) {
     return `graphics/${art.folder}/${art.prefix}${num}.${art.ext}`;
 }
 
-// Which piggy picture an ICON level wears — the 28 loop.
+// Which piggy picture an ICON level wears — the 14 loop.
 function itemPiggyIndex(iconLvl) {
     return ((iconLvl - 1) % ITEM_ART.PIGGY.count) + 1;
 }
