@@ -584,7 +584,6 @@ var CONFIG = {
         SPEED:       420,        // px/s @ design the marks slide at, full speed
         PERIOD:      420,        // px @ design before the pattern of marks repeats
         MARKS:       8,          // marks in one period
-        DEBUG_REPEAT: true,      // TEMP: bars under each road over the stretch seen twice (left) and its copy one PERIOD on (right)
         DEPTH:       3.8,        // under the cars
 
         // THE BUMPS: smooth rises in the road, H px high and W px long
@@ -732,7 +731,6 @@ var CONFIG = {
     //
     // The player always wins: the figure only ever has to be run down.
     RACE: {
-        DEBUG_PHASE:   true,     // TEMP: show each lane's race phase over the piggy car's start spot
         RIVAL_AT:      0.62,     // where the rival holds while racing, share of the car area
         RIVAL_END:     0.35,     // …eased back to as the lead runs out (the camera slides ahead, clearing the road in front), share of the car area
 

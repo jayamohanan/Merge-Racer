@@ -1407,16 +1407,6 @@ class GameScene extends Phaser.Scene {
             g.lineTo(xEnd, y - heightAt(xEnd));
             g.strokePath();
 
-            // TEMP (ROAD.DEBUG_REPEAT): the stretch shown twice — at the left,
-            // and again one PERIOD on, at the right edge.
-            const ov = xEnd - x0 - period;
-            if (R.DEBUG_REPEAT && ov > 0) {
-                const by = y + 16 * sc;
-                g.lineStyle(4 * sc, 0xff3b3b, 1);
-                g.lineBetween(x0, by, x0 + ov, by);
-                g.lineBetween(xEnd - ov, by, xEnd, by);
-            }
-
             // THE MARKS, every period across the lane, slid back by the offset.
             for (let base = x0 - period; base < xEnd + period; base += period) {
                 for (const m of set.marks) {
@@ -2129,21 +2119,6 @@ class GameScene extends Phaser.Scene {
                 if (bd[1] && bd[1].scene) bd[1].x = en.x + bd[1].dx;
             }
             this.roadOffsets[i] = Math.max(0, rc.road0 + rc.cam);
-
-            // TEMP (RACE.DEBUG_PHASE): the lane's phase, over the piggy car's
-            // start spot.
-            if (R.DEBUG_PHASE) {
-                const pt = this._phaseTexts || (this._phaseTexts = []);
-                const sc = this.layoutConfig.platformScale;
-                if (!pt[i] || !pt[i].scene) {
-                    pt[i] = this._onRoad(this.add.text(0, 0, '', {
-                        fontSize: Math.max(10, Math.round(16 * sc)) + 'px', fontFamily: CONFIG.FONT_FAMILY,
-                        color: '#ffffff', stroke: '#000000', strokeThickness: Math.round(3 * sc),
-                    })).setOrigin(0.5, 1).setDepth(6);
-                }
-                const p = this.platforms[i];
-                pt[i].setText(rc.phase).setPosition(m.home, p.slotY + p.slotSize / 2 - car.carH - 4 * sc);
-            }
         });
     }
 
