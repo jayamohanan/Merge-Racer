@@ -1714,6 +1714,16 @@ class GameScene extends Phaser.Scene {
         return Math.max(1, ((CONFIG.ROAD || {}).SPEED || 420) * this.layoutConfig.platformScale);
     }
 
+    // THE RATE THE PIGGY CAR GLIDES AT, in lead units per second: its piggy's
+    // value, held so the car never goes faster than RACE.MAX_SPEED x V — an
+    // overpowered piggy otherwise outruns the camera (see RACE.MAX_SPEED).
+    _raceRate(i, m) {
+        const lane = this.lanes[i], V = this._raceV();
+        const cap = (Math.max(1, (CONFIG.RACE || {}).MAX_SPEED || 2.5) - 1) * V
+                  * Math.max(1, lane.total) / Math.max(1, m.meet - m.home);
+        return Math.min(lane.overRate || 0, cap);
+    }
+
     // LANE i's YARDSTICKS, on screen: the piggy car's start (its home), where
     // the rival holds while racing (RIVAL_AT of the car area), and where the
     // piggy car is when the noses meet.
@@ -2030,7 +2040,7 @@ class GameScene extends Phaser.Scene {
                 if (lane.track === undefined) lane.track = lane.left;
                 const glide = (CONFIG.CHASE_FX || {}).COUNT || {};
                 lane.track = glide.ENABLED === false ? lane.left
-                           : Math.max(lane.left, lane.track - (lane.overRate || 0) * dt);
+                           : Math.max(lane.left, lane.track - this._raceRate(i, m) * dt);
                 if (lane.track > lane.left && !(lane.overRate > 0)) lane.track = lane.left;
                 const p0 = rc.pw;
                 rc.vr = V;
@@ -2041,7 +2051,7 @@ class GameScene extends Phaser.Scene {
                 rc.vp = dt > 0 ? (rc.pw - p0) / dt : V;
                 if (lane.closing && lane.track <= 0) {
                     // (Its speed is the glide's — not this last part-frame's.)
-                    rc.vp = V + (lane.overRate || 0) * (m.meet - m.home) / Math.max(1, lane.total);
+                    rc.vp = V + this._raceRate(i, m) * (m.meet - m.home) / Math.max(1, lane.total);
                     lane.closing = false;
                     lane.track = undefined;
                     // The camera on this frame's mark first: the finish takes
@@ -2064,7 +2074,8 @@ class GameScene extends Phaser.Scene {
                 // TILL ITS NOSE IS ON THE LINE it keeps pulling away: its
                 // speed over the rival's grows (FINISH_ACCEL), so no finish
                 // is a photo finish.
-                else if (!f.won) rc.vp += v(R.FINISH_ACCEL, 100) * this.layoutConfig.platformScale * dt;
+                else if (!f.won) rc.vp = Math.min(rc.vp + v(R.FINISH_ACCEL, 100) * this.layoutConfig.platformScale * dt,
+                                                  Math.max(rc.vp, v(R.MAX_SPEED, 2.5) * V));
                 rc.pw += rc.vp * dt;
                 if (f.braking && (rc.vp <= 0 || rc.pw >= f.pS)) { rc.pw = f.pS; rc.vp = 0; }
                 // THE RIVAL keeps V till it has finished — its nose over the
@@ -2083,7 +2094,11 @@ class GameScene extends Phaser.Scene {
                 // race, so the hand-over from the rival never jerks.
                 f.t += dt;
                 const tau = (R.CAM || {}).DRIFT_S !== undefined ? R.CAM.DRIFT_S : 0.4;
-                const Pa = f.P0 + f.u0 * tau * (1 - Math.exp(-f.t / tau));
+                // NEVER PAST THE ROAD'S RIGHT EDGE: on a narrow road the drift
+                // could carry the nose out of frame — the camera keeps up instead.
+                const CA = this.carArea, sc = this.layoutConfig.platformScale;
+                const Pmax = CA.x + CA.width - W / 2 - (car.lunge || 0) - v((R.CAM || {}).EDGE_PAD, 12) * sc;
+                const Pa = Math.min(Pmax, f.P0 + f.u0 * tau * (1 - Math.exp(-f.t / tau)));
                 if (f.braking && f.Pb === undefined) f.Pb = Pa;
                 const s = f.braking ? Math.max(0, Math.min(1, (rc.pw - f.pBrake) / Math.max(1, f.pS - f.pBrake))) : 0;
                 target = rc.pw - (f.braking ? f.Pb + (f.Pend - f.Pb) * s * s * (3 - 2 * s) : Pa);

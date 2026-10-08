@@ -106,7 +106,7 @@ var CONFIG = {
         BATCH:    4,        // icons per tick, so ~4.5 per second at the default
     },
 
-    BATTERY_START_LEVEL: 50,
+    BATTERY_START_LEVEL: 1,
     // Coins a new run starts with. Default 2500; raise it to debug later levels.
     START_COINS: 2500,
     // THE ECONOMY. Coins come from catching villains — see levelData.js.
@@ -769,8 +769,14 @@ var CONFIG = {
         // close, long a clear win with the rival well back.
         AHEAD_MS:      [700, 2200],
         FINISH_ACCEL:  100,      // from the noses meeting till its nose is on the line, the piggy car keeps gaining speed on the rival, px/s² @ design
+        // A CAP ON HOW FAST THE PIGGY CAR LOOKS, as a multiple of road speed.
+        // A piggy far stronger than its level would otherwise close the gap and
+        // cross the line so fast the camera loses both cars and the flag. The
+        // figures still run at the piggy's real value; only the car is held.
+        MAX_SPEED:     2.5,      // x road speed V
         CAM: {
             DRIFT_S:   0.4,      // after the noses meet, the piggy car's lead over the rival on screen fades over about this (s)
+            EDGE_PAD:  12,       // that drift never takes the piggy car's nose closer than this to the road's right edge, px @ design
         },
         // THE END SCREEN: past the line both cars roll on till it has left
         // the road's frame (LINE.OFF_PAD), so no flag is left waving there;
