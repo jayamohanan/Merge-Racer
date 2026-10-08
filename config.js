@@ -566,6 +566,13 @@ var CONFIG = {
         CHARGE_RATE_GAP: 2,            // gap (px) between the slot's edge and
                                        // the charge-rate figure. The font's
                                        // own padding adds to this on screen
+        // THE DROP ZONE round each slot — bigger than the slot, centred on
+        // it, as far each way as the other. X and Y are shares of the most it
+        // may spread: across, to the edge of the race's half (the grid's side
+        // in landscape, the screen's in portrait); up and down, to halfway to
+        // the next slot (and never past the race's half), so no two overlap.
+        // 0 is the slot itself.
+        DROP_ZONE: { X: 1, Y: 1 },
     },
 
     // ── THE ROAD ─────────────────────────────────────────────────────────────
@@ -791,6 +798,16 @@ var CONFIG = {
         // speed — is picked afresh per lane, so finishes differ: short is
         // close, long a clear win with the rival well back.
         AHEAD_MS:      [700, 2200],
+        // THE PIGGY CAR'S SKID at the end of its braking: its tyres lock for
+        // the last LOCK_S of it and it slides on, its nose dips on its springs
+        // and dust kicks up at the tyres. The rival just brakes.
+        SKID: {
+            ENABLED:       true,
+            LOCK_S:        0.35,  // s: the last of the braking, tyres locked
+            DIP:           70,    // the nose's kick down as they lock, px/s @ design (the tail lifts a third of that)
+            DUST:          4,     // puffs as they lock
+            DUST_EVERY_MS: 90,    // and one more each this while it slides
+        },
         FINISH_ACCEL:  100,      // from the noses meeting till its nose is on the line, the piggy car keeps gaining speed on the rival, px/s² @ design
         // A CAP ON HOW FAST THE PIGGY CAR LOOKS, as a multiple of road speed.
         // A piggy far stronger than its level would otherwise close the gap and
@@ -985,6 +1002,30 @@ var CONFIG = {
                 'Torque Ty', 'Boost Bea', 'Clutch Cal', 'Spark Sid', 'Fender Flo', 'Gearbox Gil',
                 'Hubcap Hal', 'Axle Ada', 'Throttle Tim', 'Brake Bree', 'Chrome Cleo', 'Exhaust Eli',
                 'Muffler Mo', 'Spoiler Sal', 'Wheelie Wes', 'Racer Ruby', 'Lap Lou', 'Pit Pete'],
+    },
+
+    // ── THE VS CARD ──────────────────────────────────────────────────────────
+    // At each level's start, as the rivals drop in: a card over the race area
+    // only (like the rank panel), split by a slant — the player's piggy and rank on the left,
+    // the level's rival (its head, its RANK name and rank) on the right, VS
+    // between. No lane drives until it goes; a tap skips it.
+    VERSUS: {
+        ENABLED:    true,
+        POP_MS:     200,
+        HOLD_MS:    1200,      // up, after the sides and the VS are in
+        OUT_MS:     220,
+        DEPTH:      40,
+        W:          440,       // px @ design, at most (and 86% of the race area)
+        H:          210,       // px @ design, at most (and 86% of the race area)
+        FIG:        84,        // px @ design: the pictures' face (shortest side)
+        SLANT:      0.12,      // the split's lean: its top and bottom this share of the height either side of centre
+        VS_TEXT:    'VS',
+        VS_COLOR:   '#ffffff',
+        YOU:        'YOU',
+        YOU_FILL:   '#ffd23f', // the player's half
+        RIVAL_FILL: '#f26b5b', // the rival's half
+        RANK_FILL:  '#2b2013', // the rank pills: the player's now, the rival's the one a win takes
+        RANK_COLOR: '#ffffff',
     },
 
     // ── THE CHASE'S FEEDBACK ─────────────────────────────────────────────────

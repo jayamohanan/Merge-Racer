@@ -1125,7 +1125,14 @@ class GameScene extends Phaser.Scene {
             const chargeRateText = this.add.text(slotX, rateY, '', style)
                 .setOrigin(0.5, above ? 1 : 0).setDepth(5).setVisible(false);
 
-            const slot = { index: i, slotX, slotY, slotSize: ssz, slotBg, slotBgFilled, chargeRateText };
+            // THE DROP ZONE (PLATFORM.DROP_ZONE): its half-width and
+            // half-height, the same both ways from the slot's centre — never
+            // past the race's half, nor more than halfway to the next slot.
+            const DZ = P.DROP_ZONE || {}, lerp = (k, a, b) => a + (b - a) * Math.max(0, Math.min(1, v(k, 0)));
+            const dropHW = lerp(DZ.X, ssz / 2, Math.max(ssz / 2, slotX - B.x));
+            const dropHH = lerp(DZ.Y, ssz / 2, Math.max(ssz / 2,
+                Math.min(bandH / 2, slotY - B.y, B.y + B.height - slotY)));
+            const slot = { index: i, slotX, slotY, slotSize: ssz, dropHW, dropHH, slotBg, slotBgFilled, chargeRateText };
             if (this.platforms[i]) Object.assign(this.platforms[i], slot);
             else this.platforms.push(Object.assign(slot, { batterySprite: null, batteryLevelText: null }));
         }
@@ -1223,8 +1230,13 @@ class GameScene extends Phaser.Scene {
         all.forEach(([car, i, rival]) => {
             if (!car || !car.scene) return;
             const rc = this.race[i];
+            // LOCKED in the piggy car's skid (RACE.SKID): not turning at all.
+            if (!rival && rc && rc.phase === 'finish' && rc.fin && rc.fin.locked) { car.wheelSpeed = 0; return; }
             const want = rc && !(rc.entering && !rival) ? atRoad * Math.max(0, rival ? rc.vr : rc.vp) / V : 0;
-            car.wheelSpeed += (want - car.wheelSpeed) * ease;
+            // FROM THE FINISH ON, exactly its car's speed: eased, the tyres
+            // lagged a hard stop and kept turning on a car all but at rest.
+            const fin = rc && (rc.phase === 'finish' || rc.phase === 'done');
+            car.wheelSpeed += (want - car.wheelSpeed) * (fin ? 1 : ease);
             if (!want && car.wheelSpeed < 1) car.wheelSpeed = 0;
             if (!car.wheelSpeed) return;
             car.wheelAngle = (car.wheelAngle + car.wheelSpeed * delta / 1000) % 360;
@@ -1849,8 +1861,122 @@ class GameScene extends Phaser.Scene {
             end = Math.max(end, delay + ms);
         });
         if (end < 0) return;
+        // No racing until the rivals have settled AND the VS card has gone.
         this._briefing = true;
-        this.time.delayedCall(end + v(D.SETTLE_MS, 200), () => { this._briefing = false; });
+        let wait = 2;
+        const ready = () => { if (--wait === 0) this._briefing = false; };
+        this.time.delayedCall(end + v(D.SETTLE_MS, 200), ready);
+        this._showVersus(ready);
+    }
+
+    // THE VS CARD at a level's start (VERSUS): over the race area only, the
+    // merge grid carrying on — split by a slant, the player's piggy and rank
+    // on the left, the level's rival (head, name, rank) on the right. The sides slide in, VS
+    // punches in, it holds, then goes. `done` runs as it goes; a tap skips.
+    _showVersus(done) {
+        const X = CONFIG.VERSUS || {}, K = CONFIG.RANK || {}, v = (x, d) => (x !== undefined ? x : d);
+        const CA = this.carArea, sc = this.layoutConfig.platformScale;
+        if (X.ENABLED === false || !CA) { done(); return; }
+        const font = (px, color) => ({ fontSize: Math.max(9, Math.round(px * sc)) + 'px',
+            fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT, color });
+        const ink = K.INK || '#2b2013';
+        const W = Math.min(CA.width * 0.86, v(X.W, 440) * sc), H = Math.min(CA.height * 0.86, v(X.H, 210) * sc);
+        const pad = 12 * sc, rad = 16 * sc;
+        const panel = this.add.container(CA.x + CA.width / 2, CA.y + CA.height / 2).setDepth(v(X.DEPTH, 40));
+
+        // THE CARD, SPLIT BY A SLANT: the player's colour left of it, the
+        // rival's right — the slant leaning SLANT of the height each way
+        // from the centre, top to the right. Each half is the rounded card
+        // cut along the slant (no masks in this build).
+        const kx = v(X.SLANT, 0.12) * H;
+        const slantX = (y) => -2 * kx * y / H;
+        const card = [];
+        [[W / 2 - rad, -H / 2 + rad, -90], [W / 2 - rad, H / 2 - rad, 0],
+         [-W / 2 + rad, H / 2 - rad, 90], [-W / 2 + rad, -H / 2 + rad, 180]].forEach(([cx, cy, a0]) => {
+            for (let n = 0; n <= 6; n++) {
+                const a = (a0 + n * 15) * Math.PI / 180;
+                card.push({ x: cx + rad * Math.cos(a), y: cy + rad * Math.sin(a) });
+            }
+        });
+        // One side of the slant (sgn -1 left, 1 right) of a polygon.
+        const cut = (pts, sgn) => {
+            const f = (p) => sgn * (p.x - slantX(p.y)), out = [];
+            pts.forEach((p, n) => {
+                const q = pts[(n + 1) % pts.length], fp = f(p), fq = f(q);
+                if (fp >= 0) out.push(p);
+                if ((fp >= 0) !== (fq >= 0)) {
+                    const t = fp / (fp - fq);
+                    out.push({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+                }
+            });
+            return out;
+        };
+        const bg = this.add.graphics();
+        bg.fillStyle(0x000000, 0.22).fillRoundedRect(-W / 2 + 4 * sc, -H / 2 + 6 * sc, W, H, rad);
+        bg.fillStyle(hexColor(X.YOU_FILL || '#ffd23f'), 1).fillPoints(cut(card, -1), true);
+        bg.fillStyle(hexColor(X.RIVAL_FILL || '#f26b5b'), 1).fillPoints(cut(card, 1), true);
+        bg.lineStyle(Math.max(3, 6 * sc), hexColor(ink), 1).lineBetween(kx, -H / 2, -kx, H / 2);
+        bg.lineStyle(Math.max(1, 2 * sc), 0xffffff, 1).lineBetween(kx, -H / 2, -kx, H / 2);
+        bg.lineStyle(Math.max(2, 3 * sc), hexColor(ink), 1).strokeRoundedRect(-W / 2, -H / 2, W, H, rad);
+        panel.add(bg);
+
+        // ONE SIDE: the picture standing (its shortest side the face, so
+        // ears / horns grow past it), the name under it, and the rank in a
+        // pill — the player's now, the rival's the one a win takes.
+        const tw = W / 2 - pad - kx, th = H - pad * 2, top = -H / 2 + pad;
+        const fig = Math.min(v(X.FIG, 84) * sc, th * 0.42);
+        const ranked = K.ENABLED !== false;
+        const side = (x, key, name, rank) => {
+            const c = this.add.container(x, 0);
+            if (this.textures.exists(key)) {
+                const im = this.add.image(0, top + th * (ranked ? 0.55 : 0.62), key).setOrigin(0.5, 1);
+                im.setScale(fig / Math.min(im.width, im.height));
+                c.add(im);
+            }
+            const fit = (t) => { if (t.width > tw * 0.92) t.setScale(tw * 0.92 / t.width); return t; };
+            c.add(fit(this.add.text(0, top + th * (ranked ? 0.67 : 0.78), name, font(20, ink)).setOrigin(0.5)));
+            if (ranked) {
+                const rt = fit(this.add.text(0, top + th * 0.86, '#' + this._bigNum(rank),
+                    font(18, X.RANK_COLOR || '#ffffff')).setOrigin(0.5));
+                const pw = rt.displayWidth + 20 * sc, ph = rt.displayHeight + 2 * sc;
+                const pill = this.add.graphics().fillStyle(hexColor(X.RANK_FILL || ink), 1)
+                    .fillRoundedRect(-pw / 2, rt.y - ph / 2, pw, ph, ph / 2);
+                c.add([pill, rt]);
+            }
+            return c;
+        };
+        const rivalR = this._rankAfter(this.level);
+        const sx = W / 4 + kx / 2;
+        const left  = side(-sx, 'podium_piggy', X.YOU || 'YOU', this._rankAfter(this.level - 1));
+        const right = side(sx, villainKey(villainIndexFor(this.level)), this._racerName(rivalR), rivalR);
+        const vs = this.add.text(0, 0, X.VS_TEXT || 'VS', Object.assign(font(46, X.VS_COLOR || '#ffffff'),
+            { stroke: ink, strokeThickness: Math.max(3, Math.round(6 * sc)) })).setOrigin(0.5);
+        panel.add([left, right, vs]);
+
+        // THE TIMELINE: pop in, sides slide in, VS punches in, hold, go.
+        const popMs = v(X.POP_MS, 200), holdMs = v(X.HOLD_MS, 1200), outMs = v(X.OUT_MS, 220);
+        panel.setScale(0.9).setAlpha(0);
+        this.tweens.add({ targets: panel, scale: 1, alpha: 1, duration: popMs, ease: 'Back.easeOut' });
+        [[left, -1], [right, 1]].forEach(([c, d]) => {
+            const x = c.x;
+            c.x += d * W * 0.25; c.setAlpha(0);
+            this.tweens.add({ targets: c, x, alpha: 1, delay: popMs * 0.5, duration: 260, ease: 'Cubic.easeOut' });
+        });
+        vs.setScale(2.4).setAlpha(0);
+        this.tweens.add({ targets: vs, scale: 1, alpha: 1, delay: popMs + 220, duration: 220, ease: 'Back.easeOut' });
+        let closed = false;
+        const close = () => {
+            if (closed) return;
+            closed = true;
+            timer.remove(false);
+            done();
+            this.tweens.add({ targets: panel, alpha: 0, y: panel.y - 16 * sc, duration: outMs, ease: 'Cubic.easeIn',
+                onComplete: () => panel.destroy() });
+        };
+        const timer = this.time.delayedCall(popMs + 440 + holdMs, close);
+        const hit = this.add.rectangle(0, 0, W, H, 0x000000, 0).setInteractive();
+        hit.on('pointerdown', close);
+        panel.add(hit);
     }
 
     // LANE i's RIVAL FALLS onto its road: from HEIGHT of a lane's band above
@@ -2156,29 +2282,62 @@ class GameScene extends Phaser.Scene {
                 const f = rc.fin;
                 // THE PIGGY CAR keeps its speed till wholly across the line,
                 // then brakes, steadily, to its spot.
+                // BRAKING runs on a fixed curve from where it began, so it
+                // lands exactly on its spot — stepped frame by frame it fell
+                // a few px short and snapped onto it at the stop.
+                const brake = (b, x0, v0, a, S) => {
+                    b.t = (b.t || 0) + dt;
+                    const T = v0 / a;
+                    if (b.t >= T) return [S, 0];
+                    return [x0 + v0 * b.t - a * b.t * b.t / 2, v0 - a * b.t];
+                };
                 if (!f.braking && rc.pw >= f.across) {
                     f.braking = true;
                     f.pBrake = rc.pw;
+                    f.pv0 = rc.vp;
                     f.a = rc.vp * rc.vp / (2 * Math.max(1, f.pS - rc.pw));
+                    f.pb = {};
                 }
-                if (f.braking) rc.vp = Math.max(0, rc.vp - f.a * dt);
-                // TILL ITS NOSE IS ON THE LINE it keeps pulling away: its
-                // speed over the rival's grows (FINISH_ACCEL), so no finish
-                // is a photo finish.
-                else if (!f.won) rc.vp = Math.min(rc.vp + v(R.FINISH_ACCEL, 100) * this.layoutConfig.platformScale * dt,
-                                                  Math.max(rc.vp, v(R.MAX_SPEED, 2.5) * V));
-                rc.pw += rc.vp * dt;
-                if (f.braking && (rc.vp <= 0 || rc.pw >= f.pS)) { rc.pw = f.pS; rc.vp = 0; }
+                if (f.braking) {
+                    [rc.pw, rc.vp] = brake(f.pb, f.pBrake, f.pv0, f.a, f.pS);
+                    // THE SKID (RACE.SKID): the last LOCK_S of the braking on
+                    // locked tyres — the nose dipping, dust kicking up.
+                    const SK = R.SKID || {};
+                    if (SK.ENABLED !== false && rc.vp > 0) {
+                        const sc = this.layoutConfig.platformScale, ends = car.susp.ends;
+                        if (!f.locked && f.pv0 / f.a - f.pb.t <= v(SK.LOCK_S, 0.35)) {
+                            f.locked = true;
+                            f.dustT = 0;
+                            const dip = v(SK.DIP, 70) * sc;
+                            ends[ends.length - 1].v -= dip;
+                            if (ends.length > 1) ends[0].v += dip / 3;
+                            this._dust(car, -1, v(SK.DUST, 4));
+                        } else if (f.locked && (f.dustT += dt * 1000) >= v(SK.DUST_EVERY_MS, 90)) {
+                            f.dustT = 0;
+                            this._dust(car, -1, 1);
+                        }
+                    }
+                }
+                else {
+                    // TILL ITS NOSE IS ON THE LINE it keeps pulling away: its
+                    // speed over the rival's grows (FINISH_ACCEL), so no finish
+                    // is a photo finish.
+                    if (!f.won) rc.vp = Math.min(rc.vp + v(R.FINISH_ACCEL, 100) * this.layoutConfig.platformScale * dt,
+                                                 Math.max(rc.vp, v(R.MAX_SPEED, 2.5) * V));
+                    rc.pw += rc.vp * dt;
+                }
                 // THE RIVAL keeps V till it has finished — its nose over the
                 // line — then brakes, steadily, to rest behind the winner. Its
                 // nose never passes the winner's.
                 if (!f.rBraking && rc.rw + m.eW / 2 >= f.flagW) {
                     f.rBraking = true;
+                    f.rBrake = rc.rw;
+                    f.rv0 = rc.vr;
                     f.ra = rc.vr * rc.vr / (2 * Math.max(1, f.rS - rc.rw));
+                    f.rb = {};
                 }
-                if (f.rBraking) rc.vr = Math.max(0, rc.vr - f.ra * dt);
-                rc.rw += rc.vr * dt;
-                if (f.rBraking && (rc.vr <= 0 || rc.rw >= f.rS)) { rc.rw = f.rS; rc.vr = 0; }
+                if (f.rBraking) [rc.rw, rc.vr] = brake(f.rb, f.rBrake, f.rv0, f.ra, f.rS);
+                else rc.rw += rc.vr * dt;
                 rc.rw = Math.min(rc.rw, rc.pw + (W - m.eW) / 2);
                 // THE CAMERA rides with the piggy car (_raceFinish: P0, u0,
                 // Pend) — its place on screen carrying on smoothly from the
@@ -3993,7 +4152,7 @@ class GameScene extends Phaser.Scene {
         for (let i = 0; i < this.platforms.length; i++) {
             const p    = this.platforms[i];
             const half = p.slotSize / 2;
-            if (Math.abs(dx - p.slotX) <= half && Math.abs(dy - p.slotY) <= half) {
+            if (Math.abs(dx - p.slotX) <= (p.dropHW || half) && Math.abs(dy - p.slotY) <= (p.dropHH || half)) {
                 this.handleDropOnPlatformSlot(i, bd);
                 this.draggingBattery = null;
                 return;
