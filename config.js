@@ -16,7 +16,7 @@ function getawayCarArt(n, w, h, tyre, rear, front, face) {
         TYRE: `graphics/villain_car/car_tyre_${nn}.webp`,
         BODY_W: w, BODY_H: h, TYRE_SIZE: tyre,
         TYRES: [{ x: rear[0], y: rear[1] }, { x: front[0], y: front[1] }],
-        FACE: Object.assign({ HEAD_FRAC: 0.55 }, face),
+        FACE: face,
     };
 }
 
@@ -618,8 +618,31 @@ var CONFIG = {
     // VILLAIN from the game's earlier life; it is the rival.) See CONFIG.RACE
     // for the race itself.
     VILLAIN: {
-        DIR:   'graphics/villain/',
-        FILES: ['villain_01.webp', 'villain_02.webp', 'villian_03.webp'],
+        // Head-only art: the shortest side is the face (128 px), ears / horns
+        // grow the other side. Placed by the bottom centre.
+        DIR:   'graphics/opponent/',
+        FILES: ['mouse_rookie.webp', 'bunny_sprinter.webp', 'chick_racer.webp',
+                'frog_hopper.webp', 'squirrel_dash.webp', 'puppy_rookie.webp',
+                'kitten_racer.webp', 'duck_driver.webp', 'hamster_turbo.webp',
+                'goat_kid.webp', 'red_panda.webp', 'raccoon_bandit.webp',
+                'koala_cruiser.webp', 'beaver_builder.webp', 'fox_racer.webp',
+                'sheep_challenger.webp', 'panda_pilot.webp', 'deer_racer.webp',
+                'otter_driver.webp', 'owl_racer.webp', 'crow_rival.webp',
+                'penguin_driver.webp', 'parrot_racer.webp', 'rooster_speedster.webp',
+                'eagle_challenger.webp', 'turtle_racer.webp', 'chameleon_driver.webp',
+                'gecko_racer.webp', 'crocodile_kid.webp', 'snake_racer.webp',
+                'monkey_driver.webp', 'gorilla_racer.webp', 'lemur_racer.webp',
+                'sloth_driver.webp', 'tiger_racer.webp', 'leopard_racer.webp',
+                'lion_challenger.webp', 'wolf_racer.webp', 'hyena_driver.webp',
+                'bear_racer.webp', 'polar_bear.webp', 'moose_racer.webp',
+                'ram_driver.webp', 'bull_driver.webp', 'bison_driver.webp',
+                'rhino_driver.webp', 'hippo_driver.webp', 'elephant_racer.webp',
+                'giraffe_driver.webp', 'zebra_racer.webp', 'bat_racer.webp',
+                'hedgehog_driver.webp', 'porcupine_racer.webp', 'skunk_racer.webp',
+                'badger_driver.webp', 'coyote_racer.webp', 'lynx_driver.webp',
+                'kangaroo_racer.webp', 'capybara_racer.webp', 'alpaca_racer.webp',
+                'axolotl_racer.webp', 'dragon_rival.webp', 'robot_rival.webp',
+                'alien_racer.webp', 'crowned_raven_champion.webp'],
         DEPTH:         4,
         PAYOUT_MULT:   1,        // coins = its lead × this (levels 1–2 are flat)
 
@@ -644,9 +667,9 @@ var CONFIG = {
             SCALE:   1,            // of the piggy car's size
             DEPTH:   3.9,          // behind the piggy car (CAR.DEPTH 4)
             // The head in the window, in the BODY's pixels (254 x 97): its
-            // centre at X, Y and H tall — the top HEAD_FRAC of the rival's
-            // picture, which is the head.
-            FACE: { X: 126, Y: 28, H: 40, HEAD_FRAC: 0.55 },
+            // centre at X, Y and its face (the picture's shortest side) H —
+            // ears / horns grow past it.
+            FACE: { X: 126, Y: 28, H: 40 },
             // THE LOOK BACK: the driver stays down out of sight — only the
             // window shows — and pops up from the sill to glance back only at
             // milestones, as the piggy car runs down each share of the lead in
@@ -823,6 +846,7 @@ var CONFIG = {
             AHEAD_STROKE:  '#ffffff',
             AHEAD_PREFIX: '+',
             FLIP_SCALE:   1.3,         // the swell as it turns green
+            HIDE_AT_LINE: true,        // gone the moment the nose crosses (FINISH! is there); false = swell, hold, fade
             FREEZE_SCALE: 1.45,        // the swell as it stops at the line
             HOLD_MS:      1200,
             FADE_MS:      300,
@@ -889,6 +913,30 @@ var CONFIG = {
             SIZE:       24,          // px @ design
             FIRST:      { TEXT: '1ST', FILL: '#ffd23f', INK: '#5a3b00' },
             SECOND:     { TEXT: '2ND', FILL: '#d7dde5', INK: '#2f3742' },
+        },
+        // THE PODIUM once both cars of a lane have stopped: 1 / 2 / 3 blocks in
+        // the middle of the lane, the piggy on 1, the rival on 2, 3 left empty.
+        // The lane's cars go as it pops up; it stays till the next level.
+        PODIUM: {
+            ENABLED:    true,
+            DEPTH:      6.5,
+            FILL:       0.63,        // share of the lane's height above the road it takes
+            HEIGHTS:    [1, 0.72, 0.5], // blocks 1, 2, 3, as shares of block 1's height
+            WIDTH:      1.15,        // a block's width, × block 1's height
+            FIGURE:     0.95,        // piggy / rival size, × a block's width
+            // One look for every block, as the slots: blank = CELL's colours.
+            FILL_COLOR:   '',        // blank = CELL.FILLED_BG_COLOR
+            BORDER_COLOR: '',        // blank = CELL.INSET_SHADOW_COLOR
+            RADIUS:     12,          // px @ design, the blocks' top corners
+            NUM_COLOR:  '#ffffff',   // the 1 / 2 / 3
+            NUM_STROKE: '#2b2013',
+            TITLE:      'RACE {n}',  // the lane's name over the podium, {n} = 1..3 top down ('' = none)
+            TITLE_SIZE: 22,          // px @ design, at most (shrunk to fit the room above)
+            SETTLE_MS:  400,         // the cars at rest this long before it pops up
+            POP_MS:     300,         // the steps rising out of the road
+            DROP:       30,          // px @ design the rival and piggy fall onto their steps
+            DROP_MS:    300,         // each one's fall
+            STAGGER_MS: 180,         // the rival first, the piggy this much after
         },
     },
 

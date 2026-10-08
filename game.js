@@ -230,6 +230,7 @@ class GameScene extends Phaser.Scene {
         this._briefing         = false;  // the rivals are dropping in: no racing yet
         this.finishLines       = [];     // per lane: its finish line, once it has won
         this.raceBadges        = [];     // per lane: its 1ST / 2ND badges
+        this.podiums           = [];     // per lane: its podium, while it is up (_racePodium)
         this._zoomCams         = [];     // per lane: its zoom camera (_laneZoom)
         this.race              = [];     // per lane: its race — places, speeds, camera (_raceStep)
         this._rankPanel        = null;   // the rank-up panel, while it is up (_showRankUp)
@@ -1289,14 +1290,15 @@ class GameScene extends Phaser.Scene {
             if (!lane.dropped) en.setVisible(false);
             this.villains[i] = en;
 
-            // THE LANE'S RACE, from its record (_raceSetup). A NEW LEVEL rolls
-            // the piggy car back to its home first.
+            // THE LANE'S RACE, from its record (_raceSetup). A NEW LEVEL puts
+            // the piggy car straight back at its home — no roll across.
             if (car) {
                 this._raceSetup(i, enter);
                 if (enter) {
-                    this.tweens.add({ targets: car, x: car.homeX,
-                        duration: v(V.ENTER_MS, 400) + 200, ease: 'Sine.easeInOut',
-                        onComplete: () => { const rc = this.race[i]; if (rc) rc.entering = false; } });
+                    this.tweens.killTweensOf(car);
+                    car.x = car.homeX;
+                    const rc = this.race[i];
+                    if (rc) rc.entering = false;
                 }
             }
 
@@ -1590,15 +1592,15 @@ class GameScene extends Phaser.Scene {
         const en = this._makeCar(0, ground, gy * k, C).setDepth(v(K.DEPTH, 3.9));
         if (K.TINT) en.bodyImg.setTint(hexColor(K.TINT));
 
-        // THE DRIVER: the top of the villain's picture — its head — in the window.
+        // THE DRIVER: the rival's head in the window.
         if (this.textures.exists(key)) {
-            // Anchored at its CUT EDGE, on the window's sill — so it pops up
-            // from the sill when it peeks (_peekFaces), and sinks back to it.
+            // Anchored at its BOTTOM CENTRE, on the window's sill — so it pops
+            // up from the sill when it peeks (_peekFaces), and sinks back to
+            // it. Its shortest side is the face, H; ears / horns grow past.
             const sill = -gy + v(F.Y, 28) + v(F.H, 40) / 2;
             const face = this.add.image(-bw / 2 + v(F.X, 126), sill, key);
             const fw = face.frame.realWidth, fh = face.frame.realHeight;
-            const ch = fh * v(F.HEAD_FRAC, 0.55);
-            face.setCrop(0, 0, fw, ch).setOrigin(0.5, ch / fh).setScale(v(F.H, 40) / ch);
+            face.setOrigin(0.5, 1).setScale(v(F.H, 40) / Math.min(fw, fh));
             face.baseScale = face.scaleX;
             en.addAt(face, 1);
             en.face = face;
@@ -1823,7 +1825,10 @@ class GameScene extends Phaser.Scene {
         };
         this.finishLines.forEach(kill);
         this.raceBadges.forEach((pair) => (pair || []).forEach(kill));
-        this.finishLines = []; this.raceBadges = [];
+        (this.podiums || []).forEach(kill);
+        this.finishLines = []; this.raceBadges = []; this.podiums = [];
+        // The piggy cars the podiums hid come back.
+        (this.cars || []).forEach((c) => { if (c && c.scene) c.setVisible(true); });
         this._clearZooms();
     }
 
@@ -1971,8 +1976,94 @@ class GameScene extends Phaser.Scene {
         rc.pw += car.lunge || 0;
         car.lunge = 0;
         car.x = rc.pw - rc.cam;
-        const ms = this._raceBadges(i, true);
-        this.time.delayedCall(ms, () => { lane.finishing = false; this._turnWhenDone(); });
+        // NO 1ST / 2ND BADGES: the podium says it. The cars sit a moment first.
+        const P = (CONFIG.RACE || {}).PODIUM || {};
+        const done = () => { lane.finishing = false; this._turnWhenDone(); };
+        this.time.delayedCall(P.SETTLE_MS !== undefined ? P.SETTLE_MS : 400, () => this._racePodium(i, done));
+    }
+
+    // THE PODIUM (RACE.PODIUM) in the middle of lane i: blocks 2, 1, 3 left
+    // to right, the piggy on 1, the rival on 2, 3 empty. The lane's cars and
+    // badges go; it pops up, then `done`, and stays till the next level
+    // (_clearRace). No `done`: put straight there (a rebuild).
+    _racePodium(i, done) {
+        const P = (CONFIG.RACE || {}).PODIUM || {}, v = (x, d) => (x !== undefined ? x : d);
+        const L = this.layoutConfig, B = L.partB, CA = this.carArea, p = this.platforms[i];
+        if (P.ENABLED === false || !B || !CA || !p) { if (done) done(); return; }
+        [this.cars[i], this.villains[i], ...(this.raceBadges[i] || [])]
+            .forEach((o) => { if (o && o.scene) o.setVisible(false); });
+        const sc = L.platformScale, CL = CONFIG.CELL || {};
+        // DRESSED AS THE SLOTS: the cells' face and rim, rounded the same.
+        const fill = hexColor(P.FILL_COLOR || CL.FILLED_BG_COLOR || '#eaf0f6');
+        const rim = hexColor(P.BORDER_COLOR || CL.INSET_SHADOW_COLOR || '#364549');
+        const ground = p.slotY + p.slotSize / 2;
+        const bandTop = B.y + (B.height - 3 * L.slotBandH) / 2 + i * L.slotBandH;
+        const HT = P.HEIGHTS || [1, 0.72, 0.5];
+        const wK = v(P.WIDTH, 1.15), fK = v(P.FIGURE, 0.95);
+        // Block 1 plus the figure on it fill FILL of the lane above the road.
+        const h1 = (ground - bandTop) * v(P.FILL, 0.9) / (1 + wK * fK);
+        const bw = h1 * wK, fig = bw * fK;
+        const lw = Math.max(2, v(CL.INSET_BORDER_WIDTH, 3.5) * sc);
+        const rad = Math.min(bw / 2, v(P.RADIUS, 12) * sc);
+        const box = this.add.container(CA.x + CA.width / 2, ground);
+        // Left to right: 2, 1, 3.
+        [[1, -bw], [0, 0], [2, bw]].forEach(([k, x]) => {
+            const h = h1 * HT[k];
+            const g = this.add.graphics();
+            const rr = { tl: rad, tr: rad, bl: 0, br: 0 };
+            g.fillStyle(fill, 1).fillRoundedRect(x - bw / 2, -h, bw, h, rr);
+            g.lineStyle(lw, rim, 1).strokeRoundedRect(x - bw / 2, -h, bw, h, rr);
+            // The numbers as the lane figures: white on a dark outline.
+            const size = Math.max(10, Math.round(Math.min(h * 0.6, bw * 0.5)));
+            const t = this.add.text(x, -h / 2, String(k + 1), { fontSize: size + 'px',
+                fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT,
+                color: P.NUM_COLOR || '#ffffff', stroke: P.NUM_STROKE || '#2b2013',
+                strokeThickness: Math.max(3, Math.round(size * 0.14)) }).setOrigin(0.5);
+            box.add([g, t]);
+        });
+        // A picture standing on a block, its shortest side fig — the face,
+        // so a rival's ears / horns grow past it, as in the window.
+        const stand = (key, x, h) => {
+            if (!this.textures.exists(key)) return null;
+            const im = this.add.image(x, -h, key).setOrigin(0.5, 1);
+            im.setScale(fig / Math.min(im.width, im.height));
+            box.add(im);
+            return im;
+        };
+        const figs = [stand(villainKey(villainIndexFor(this.level)), -bw, h1 * HT[1]),
+                      stand('podium_piggy', 0, h1 * HT[0])].filter(Boolean);
+        // THE LANE'S NAME (TITLE) over it, in the room left above the piggy.
+        let title = null;
+        if (P.TITLE) {
+            const room = ground - bandTop - (h1 + fig);
+            const size = Math.max(10, Math.round(Math.min(v(P.TITLE_SIZE, 22) * sc, room * 0.75)));
+            title = this.add.text(0, -(h1 + fig) - room / 2, P.TITLE.replace('{n}', i + 1), {
+                fontSize: size + 'px', fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT,
+                color: P.NUM_COLOR || '#ffffff', stroke: P.NUM_STROKE || '#2b2013',
+                strokeThickness: Math.max(3, Math.round(size * 0.14)) }).setOrigin(0.5);
+            box.add(title);
+        }
+        this._onRoad(box.setDepth(v(P.DEPTH, 6.5)));
+        this.podiums[i] = box;
+        if (!done) return;
+        // IN TURN: the steps rise out of the road, then the rival and then
+        // the piggy drop onto theirs, fading in as they fall.
+        const rise = v(P.POP_MS, 300), fall = v(P.DROP_MS, 300), stag = v(P.STAGGER_MS, 180);
+        const drop = v(P.DROP, 30) * sc;
+        figs.forEach((im) => { im.landY = im.y; im.setAlpha(0).setY(im.y - drop); });
+        box.setScale(1, 0);
+        this.tweens.add({ targets: box, scaleY: 1, duration: rise, ease: 'Cubic.easeOut' });
+        // The name fades in as the steps finish rising.
+        if (title) {
+            title.setAlpha(0);
+            this.tweens.add({ targets: title, alpha: 1, duration: fall, delay: rise * 0.6 });
+        }
+        figs.forEach((im, k) => {
+            const delay = rise + k * stag;
+            this.tweens.add({ targets: im, alpha: 1, duration: fall * 0.6, delay });
+            this.tweens.add({ targets: im, y: im.landY, duration: fall, delay, ease: 'Quad.easeIn' });
+        });
+        this.time.delayedCall(rise + Math.max(0, figs.length - 1) * stag + fall, done);
     }
 
     // THE LUNGE on lane i's final finish (RACE.LUNGE): just before the line
@@ -2273,6 +2364,13 @@ class GameScene extends Phaser.Scene {
         const R = CONFIG.RACE || {}, RL = R.LEAD || {}, v = (x, d) => (x !== undefined ? x : d);
         if (!lane || !lane.ahead) return;
         lane.ahead.frozen = true;
+        // GONE AT THE LINE: FINISH! takes its place there.
+        if (RL.HIDE_AT_LINE !== false) {
+            lane.ahead.gone = true;
+            if (t && t.scene) { this.tweens.killTweensOf(t); t.setScale(1).setAlpha(1); }
+            this._setLaneLabel(i);
+            return;
+        }
         this._setLaneLabel(i);
         this._bumpLabel(i, v(RL.FREEZE_SCALE, 1.45));
         if (!t || !t.scene) return;
@@ -2651,7 +2749,7 @@ class GameScene extends Phaser.Scene {
     // A lane already won, as it ends up, put straight there (a rebuild): the
     // two cars and their badges — the line has long left the frame.
     _raceFinal(i) {
-        this._raceBadges(i, false);
+        this._racePodium(i, null);
     }
 
     // A slot's figure: metres per second.
