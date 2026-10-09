@@ -953,7 +953,6 @@ var CONFIG = {
             TITLE:      'RACE {n}',  // the lane's name over the podium, {n} = 1..3 top down ('' = none)
             TITLE_SIZE: 22,          // px @ design, at most (shrunk to fit the room above)
             SETTLE_MS:  400,         // the cars at rest this long before it pops up
-            POP_MS:     300,         // the steps rising out of the road
             DROP:       30,          // px @ design the rival and piggy fall onto their steps
             DROP_MS:    300,         // each one's fall
             STAGGER_MS: 180,         // the rival first, the piggy this much after
@@ -975,9 +974,9 @@ var CONFIG = {
     // it skips; the next level starts as it goes.
     RANK: {
         ENABLED:   true,
-        START:     2000,
+        START:     66,         // TOP_LEVEL + 1 with TAIL = TOP_LEVEL - 1: one place a level, all the way
         TOP_LEVEL: 65,
-        TAIL:      10,
+        TAIL:      64,
         CURVE:     1,
         DELAY_MS:       250,   // after the level's last finish, before it shows
         POP_MS:         180,
@@ -987,7 +986,9 @@ var CONFIG = {
         OUT_MS:         220,
         DEPTH:     40,
         W:         440,        // px @ design, at most (and 86% of the race area)
-        ROW_H:     40,
+        ROW_H:     72,         // px @ design, at most: a row, tall enough for the racer's sprite
+        AHEAD:     3,          // racers listed above the player (grey till reached)
+        BEHIND:    1,          // racers beaten earlier listed below the rival just beaten
         TITLE:       'RANK UP!',
         CHAMP_TEXT:  'CHAMPION! #1',
         YOU:         'YOU',
@@ -996,9 +997,13 @@ var CONFIG = {
         INK:         '#2b2013',
         TITLE_COLOR: '#e8590c',
         YOU_FILL:    '#ffd23f',
-        ROW_FILL:    '#f1e2c8',
+        ROW_FILL:    '#f26b5b',   // opponents' rows, as the VS card's rival half (YOU_FILL as its player half)
+        ROW_INK:     '#ffffff',   // opponents' rows: their rank and name (the player's row: INK)
         GAP_COLOR:   '#a08560',
         NEXT_COLOR:  '#6b4a2a',
+        LOCKED_TINT: '#7a7266',   // racers not yet reached: their sprite as a silhouette of this colour
+        UNLOCK_MS:    350,        // the next opponent's silhouette filling in with colour
+        BEATEN_ALPHA: 0.45,       // the row of the rival just beaten, once passed (0-1)
         // Racer names, fixed per rank.
         NAMES: ['Turbo Tess', 'Dusty Dan', 'Nitro Nia', 'Rusty Rex', 'Zippy Zoe', 'Blaze Bo',
                 'Skid Sam', 'Vroom Val', 'Drift Dex', 'Rocket Ray', 'Gravel Gus', 'Piston Pia',

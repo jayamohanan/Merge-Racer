@@ -2179,24 +2179,17 @@ class GameScene extends Phaser.Scene {
         this._onRoad(box.setDepth(v(P.DEPTH, 6.5)));
         this.podiums[i] = box;
         if (!done) return;
-        // IN TURN: the steps rise out of the road, then the rival and then
-        // the piggy drop onto theirs, fading in as they fall.
-        const rise = v(P.POP_MS, 300), fall = v(P.DROP_MS, 300), stag = v(P.STAGGER_MS, 180);
+        // THE STEPS AND NAME SHOW AT ONCE; only the rival and then the piggy
+        // drop onto theirs, fading in as they fall.
+        const fall = v(P.DROP_MS, 300), stag = v(P.STAGGER_MS, 180);
         const drop = v(P.DROP, 30) * sc;
         figs.forEach((im) => { im.landY = im.y; im.setAlpha(0).setY(im.y - drop); });
-        box.setScale(1, 0);
-        this.tweens.add({ targets: box, scaleY: 1, duration: rise, ease: 'Cubic.easeOut' });
-        // The name fades in as the steps finish rising.
-        if (title) {
-            title.setAlpha(0);
-            this.tweens.add({ targets: title, alpha: 1, duration: fall, delay: rise * 0.6 });
-        }
         figs.forEach((im, k) => {
-            const delay = rise + k * stag;
+            const delay = k * stag;
             this.tweens.add({ targets: im, alpha: 1, duration: fall * 0.6, delay });
             this.tweens.add({ targets: im, y: im.landY, duration: fall, delay, ease: 'Quad.easeIn' });
         });
-        this.time.delayedCall(rise + Math.max(0, figs.length - 1) * stag + fall, done);
+        this.time.delayedCall(Math.max(0, figs.length - 1) * stag + fall, done);
     }
 
     // THE LUNGE on lane i's final finish (RACE.LUNGE): just before the line
@@ -2638,9 +2631,16 @@ class GameScene extends Phaser.Scene {
         const N = v(K.TOP_LEVEL, 65);
         const nextR = L < N ? this._rankAfter(L + 1) : null;
 
-        const W = Math.min(CA.width * 0.86, v(K.W, 440) * sc), rowH = v(K.ROW_H, 40) * sc;
+        const W = Math.min(CA.width * 0.86, v(K.W, 440) * sc);
         const pad = 12 * sc, titleH = 44 * sc, footH = champ || nextR === null ? 0 : 34 * sc;
-        const slots = champ ? 0 : (newR > 1 ? 1 : 0) + 1 + (hasGap ? 2 : 1);
+        // ROWS: AHEAD racers above YOU's final row (fewer near #1), the
+        // slide, and BEHIND racers already beaten below YOU's first row.
+        const ahead = Math.min(Math.max(0, v(K.AHEAD, 3)), newR - 1);
+        const travel = hasGap ? 2 : 1;
+        const behind = Math.max(0, Math.min(v(K.BEHIND, 1), this._rankAfter(0) - oldR));
+        const slots = champ ? 0 : ahead + 1 + travel + behind;
+        // Rows as tall as ROW_H, but shrunk so the card fits the race area.
+        const rowH = Math.min(v(K.ROW_H, 40) * sc, slots ? (CA.height * 0.94 - pad * 2 - titleH - footH) / slots : 0);
         const H = pad * 2 + titleH + slots * rowH + footH;
         const panel = this.add.container(CA.x + CA.width / 2, CA.y + CA.height / 2).setDepth(v(K.DEPTH, 40));
         this._rankPanel = panel;
@@ -2655,18 +2655,46 @@ class GameScene extends Phaser.Scene {
             font(30, K.TITLE_COLOR || '#e8590c')).setOrigin(0.5);
         panel.add(title);
 
-        // ONE ROW: rank on the left, name, the player's row highlighted.
+        // A RANK'S SPRITE: the rival met at the level that takes that rank
+        // (the player's row: the piggy).
+        const spriteFor = (rank) => {
+            for (let l = 1; l <= N; l++) if (this._rankAfter(l) === rank) return villainKey(villainIndexFor(l));
+            return null;
+        };
+
+        // ONE ROW: rank on the left, the racer's sprite, name; the player's
+        // row highlighted. A `locked` row (a racer not yet reached) shows its
+        // sprite as a grey silhouette, with the colour sprite hidden over it
+        // for the reveal. Its content sits in `body`, so it can be faded
+        // apart from the edge fade `place` puts on the row.
         const slotY = (k) => -H / 2 + pad + titleH + (k + 0.5) * rowH;
-        const row = (rank, name, you) => {
+        const row = (rank, name, you, key, locked) => {
             const c = this.add.container(0, 0);
+            const body = this.add.container(0, 0);
+            c.add(body); c.body = body;
             const g = this.add.graphics();
-            const rw = W - pad * 2, rh = rowH - 6 * sc;
+            const rw = W - pad * 2, rh = rowH - 6 * sc, rad = Math.min(rh / 2, 14 * sc);
             g.fillStyle(hexColor(you ? (K.YOU_FILL || '#ffd23f') : (K.ROW_FILL || '#f1e2c8')), 1)
-                .fillRoundedRect(-rw / 2, -rh / 2, rw, rh, rh / 2);
-            if (you) g.lineStyle(Math.max(2, 2.5 * sc), hexColor(ink), 1).strokeRoundedRect(-rw / 2, -rh / 2, rw, rh, rh / 2);
-            const rt = this.add.text(-rw / 2 + 16 * sc, 0, '#' + this._bigNum(rank), font(20, ink)).setOrigin(0, 0.5);
-            const nt = this.add.text(-rw / 2 + 120 * sc, 0, name, font(20, ink)).setOrigin(0, 0.5);
-            c.add([g, rt, nt]);
+                .fillRoundedRect(-rw / 2, -rh / 2, rw, rh, rad);
+            if (you) g.lineStyle(Math.max(2, 2.5 * sc), hexColor(ink), 1).strokeRoundedRect(-rw / 2, -rh / 2, rw, rh, rad);
+            const tc = you ? ink : (K.ROW_INK || '#ffffff');
+            const rt = this.add.text(-rw / 2 + 16 * sc, 0, '#' + this._bigNum(rank), font(22, tc)).setOrigin(0, 0.5);
+            const fig = rh * 0.86, figX = -rw / 2 + 76 * sc + fig / 2;
+            body.add([g, rt]);
+            if (key && this.textures.exists(key)) {
+                const im = this.add.image(figX, 0, key);
+                im.setScale(fig / Math.max(im.width, im.height));
+                if (locked) {
+                    const sil = this.add.image(figX, 0, key).setScale(im.scale);
+                    if (sil.setTintFill) sil.setTintFill(hexColor(K.LOCKED_TINT || '#7a7266'));
+                    else sil.setTint(0x333333);
+                    im.setAlpha(0);
+                    body.add(sil);
+                    c.sil = sil; c.fig = im;
+                }
+                body.add(im);
+            }
+            body.add(this.add.text(figX + fig / 2 + 12 * sc, 0, name, font(22, tc)).setOrigin(0, 0.5));
             c.rankText = rt;
             return c;
         };
@@ -2677,17 +2705,37 @@ class GameScene extends Phaser.Scene {
         // fade at the window's edges (no masks in this build).
         let you = null, place = null;
         if (!champ) {
-            const top = newR > 1 ? 1 : 0;
+            const top = ahead;
             const others = [];
-            for (let r = Math.max(1, newR - 1); r < oldR; r++) {
-                const o = row(r, this._racerName(r), false);
+            let beaten = null, nextUp = null;
+            // r is the rank a racer held before this level; those from oldR
+            // on were beaten earlier and sit one place lower (r + 1), faded.
+            for (let r = newR - ahead; r < oldR + behind; r++) {
+                const o = row(r, this._racerName(r), false, spriteFor(r), r < newR);
+                if (r === newR) beaten = o;
+                if (r === newR - 1) nextUp = o;
+                if (r >= oldR) o.body.setAlpha(v(K.BEATEN_ALPHA, 0.45));
                 o.rank = r; o.shown = r;
                 panel.add(o); others.push(o);
             }
-            you = row(oldR, K.YOU || 'YOU', true);
+            you = row(oldR, K.YOU || 'YOU', true, 'podium_piggy');
             panel.add(you);
+            // UNLOCKED: once YOU passes the rival just beaten, its row fades
+            // and the next opponent's silhouette fills in with colour.
+            let unlocked = false;
+            const unlock = () => {
+                unlocked = true;
+                const ms = v(K.UNLOCK_MS, 350);
+                if (beaten) this.tweens.add({ targets: beaten.body, alpha: v(K.BEATEN_ALPHA, 0.45), duration: ms });
+                if (nextUp && nextUp.fig) {
+                    this.tweens.add({ targets: nextUp.fig, alpha: 1, duration: ms, ease: 'Quad.easeOut' });
+                    this.tweens.add({ targets: nextUp.sil, alpha: 0, duration: ms });
+                    this.tweens.add({ targets: nextUp.body, scale: 1.05, duration: ms / 2, yoyo: true, ease: 'Quad.easeOut' });
+                }
+            };
             place = (s) => {
-                const ys = top + (slots - 1 - top) * (s - newR) / Math.max(1, oldR - newR);
+                if (!unlocked && s <= newR + 0.5) unlock();
+                const ys = top + travel * (s - newR) / Math.max(1, oldR - newR);
                 you.y = slotY(ys);
                 you.rankText.setText('#' + this._bigNum(Math.round(s)));
                 for (const o of others) {
