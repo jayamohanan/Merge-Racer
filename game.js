@@ -230,7 +230,7 @@ class GameScene extends Phaser.Scene {
         this._briefing         = false;  // the rivals are dropping in: no racing yet
         this.finishLines       = [];     // per lane: its finish line, once it has won
         this.raceBadges        = [];     // per lane: its 1ST / 2ND badges
-        this.podiums           = [];     // per lane: its podium, while it is up (_racePodium)
+        this.podiums           = [];     // per lane: its WON banner, while it is up (_raceClose)
         this._zoomCams         = [];     // per lane: its zoom camera (_laneZoom)
         this.race              = [];     // per lane: its race — places, speeds, camera (_raceStep)
         this._rankPanel        = null;   // the rank-up panel, while it is up (_showRankUp)
@@ -1075,11 +1075,12 @@ class GameScene extends Phaser.Scene {
 
         // THE SAME LOOK AS THE LEAD FIGURE over the cars (VILLAIN.LABEL), so
         // the piggy's figure and the lead it runs down read as one kind of number.
-        const LB = (CONFIG.VILLAIN || {}).LABEL || {};
+        const LB = (CONFIG.VILLAIN || {}).LABEL || {}, RL = (CONFIG.RACE || {}).LEAD || {};
+        // AS THE LEAD FIGURE while the rival leads (_setLaneLabel): dark on a white outline.
         const style = {
             fontSize: Math.max(10, Math.round(v(LB.SIZE, 30) * scale)) + 'px',
             fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT,
-            color: LB.COLOR || '#ffffff', stroke: LB.STROKE || '#2b2013',
+            color: RL.BEHIND_COLOR || '#1c1c1c', stroke: RL.BEHIND_STROKE || '#ffffff',
             strokeThickness: Math.round(v(LB.STROKE_W, 5) * scale),
         };
         // The label's REAL height, so a slot and its label are centred in their
@@ -1843,7 +1844,7 @@ class GameScene extends Phaser.Scene {
         this.raceBadges.forEach((pair) => (pair || []).forEach(kill));
         (this.podiums || []).forEach(kill);
         this.finishLines = []; this.raceBadges = []; this.podiums = [];
-        // The piggy cars the podiums hid come back.
+        // The piggy cars that drove off come back.
         (this.cars || []).forEach((c) => { if (c && c.scene) c.setVisible(true); });
         this._clearZooms();
     }
@@ -2112,87 +2113,63 @@ class GameScene extends Phaser.Scene {
         rc.pw += car.lunge || 0;
         car.lunge = 0;
         car.x = rc.pw - rc.cam;
-        // NO 1ST / 2ND BADGES: the podium says it. The cars sit a moment first.
-        const P = (CONFIG.RACE || {}).PODIUM || {};
-        const done = () => { lane.finishing = false; this._turnWhenDone(); };
-        this.time.delayedCall(P.SETTLE_MS !== undefined ? P.SETTLE_MS : 400, () => this._racePodium(i, done));
+        // NO 1ST / 2ND BADGES: the close says it. The cars sit a moment, then
+        // drive off (the 'leave' step in _raceStep), then the banner.
+        const C = (CONFIG.RACE || {}).CLOSE || {};
+        if (C.ENABLED === false) { lane.finishing = false; this._turnWhenDone(); return; }
+        this.time.delayedCall(C.SETTLE_MS !== undefined ? C.SETTLE_MS : 350, () => {
+            if (this.race[i] !== rc || rc.phase !== 'done') return;
+            rc.phase = 'leave';
+            rc.leaveT = 0;
+        });
     }
 
-    // THE PODIUM (RACE.PODIUM) in the middle of lane i: blocks 2, 1, 3 left
-    // to right, the piggy on 1, the rival on 2, 3 empty. The lane's cars and
-    // badges go; it pops up, then `done`, and stays till the next level
-    // (_clearRace). No `done`: put straight there (a rebuild).
-    _racePodium(i, done) {
-        const P = (CONFIG.RACE || {}).PODIUM || {}, v = (x, d) => (x !== undefined ? x : d);
-        const L = this.layoutConfig, B = L.partB, CA = this.carArea, p = this.platforms[i];
-        if (P.ENABLED === false || !B || !CA || !p) { if (done) done(); return; }
+    // THE CARS ARE GONE from lane i: the dim and the banner (RACE.CLOSE),
+    // then the lane is done. It stays till the next level (_clearRace).
+    // No `pop`: put straight there (a rebuild).
+    _raceClose(i, pop) {
+        const C = (CONFIG.RACE || {}).CLOSE || {}, v = (x, d) => (x !== undefined ? x : d);
+        const L = this.layoutConfig, B = L.partB, CA = this.carArea;
+        const lane = this.lanes[i];
+        const done = () => { if (pop) { lane.finishing = false; this._turnWhenDone(); } };
         [this.cars[i], this.villains[i], ...(this.raceBadges[i] || [])]
             .forEach((o) => { if (o && o.scene) o.setVisible(false); });
-        const sc = L.platformScale, CL = CONFIG.CELL || {};
-        // DRESSED AS THE SLOTS: the cells' face and rim, rounded the same.
-        const fill = hexColor(P.FILL_COLOR || CL.FILLED_BG_COLOR || '#eaf0f6');
-        const rim = hexColor(P.BORDER_COLOR || CL.INSET_SHADOW_COLOR || '#364549');
-        const ground = p.slotY + p.slotSize / 2;
-        const bandTop = B.y + (B.height - 3 * L.slotBandH) / 2 + i * L.slotBandH;
-        const HT = P.HEIGHTS || [1, 0.72, 0.5];
-        const wK = v(P.WIDTH, 1.15), fK = v(P.FIGURE, 0.95);
-        // Block 1 plus the figure on it fill FILL of the lane above the road.
-        const h1 = (ground - bandTop) * v(P.FILL, 0.9) / (HT[0] + wK * fK);
-        const bw = h1 * wK, fig = bw * fK;
-        const lw = Math.max(2, v(CL.INSET_BORDER_WIDTH, 3.5) * sc);
-        const rad = Math.min(bw / 2, v(P.RADIUS, 12) * sc);
-        const box = this.add.container(CA.x + CA.width / 2, ground);
-        // Left to right: 2, 1, 3.
-        [[1, -bw], [0, 0], [2, bw]].forEach(([k, x]) => {
-            const h = h1 * HT[k];
-            const g = this.add.graphics();
-            const rr = { tl: rad, tr: rad, bl: 0, br: 0 };
-            g.fillStyle(fill, 1).fillRoundedRect(x - bw / 2, -h, bw, h, rr);
-            g.lineStyle(lw, rim, 1).strokeRoundedRect(x - bw / 2, -h, bw, h, rr);
-            // The numbers as the lane figures: white on a dark outline.
-            const size = Math.max(10, Math.round(Math.min(h * 0.6, bw * 0.5)));
-            const t = this.add.text(x, -h / 2, String(k + 1), { fontSize: size + 'px',
-                fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT,
-                color: P.NUM_COLOR || '#ffffff', stroke: P.NUM_STROKE || '#2b2013',
-                strokeThickness: Math.max(3, Math.round(size * 0.14)) }).setOrigin(0.5);
-            box.add([g, t]);
+        if (!B || !CA) { done(); return; }
+        const sc = L.platformScale, bh = L.slotBandH;
+        const bandTop = B.y + (B.height - 3 * bh) / 2 + i * bh;
+        const box = this.add.container(CA.x + CA.width / 2, bandTop + bh / 2);
+        const dim = this.add.graphics();
+        dim.fillStyle(0x000000, v(C.DIM, 0.35)).fillRect(-CA.width / 2, -bh / 2, CA.width, bh);
+        box.add(dim);
+        // THE BANNER: a dark bar, chequered at both ends, the words on it.
+        const size = Math.max(10, Math.round(Math.min(v(C.SIZE, 30) * sc, bh * 0.4)));
+        const t = this.add.text(0, 0, (C.TEXT || 'RACE {n} WON!').replace('{n}', i + 1), {
+            fontSize: size + 'px', fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT,
+            color: C.COLOR || '#ffd23f', stroke: C.STROKE || '#2b2013',
+            strokeThickness: Math.max(3, Math.round(size * 0.14)) }).setOrigin(0.5);
+        const q = Math.max(4, Math.round(v(C.CHECKER, 10) * sc));
+        const barH = q * 4, cols = 3;
+        const barW = Math.min(CA.width * 0.92, t.width + q * (cols * 2 + 4));
+        const bar = this.add.graphics();
+        bar.fillStyle(hexColor(C.BAR_COLOR || '#1d2430'), v(C.BAR_ALPHA, 0.85))
+            .fillRect(-barW / 2, -barH / 2, barW, barH);
+        [-1, 1].forEach((side) => {
+            const x0 = side < 0 ? -barW / 2 : barW / 2 - cols * q;
+            for (let r = 0; r < 4; r++) for (let c = 0; c < cols; c++) {
+                bar.fillStyle((r + c) % 2 ? 0x111111 : 0xffffff, 1)
+                    .fillRect(x0 + c * q, -barH / 2 + r * q, q, q);
+            }
         });
-        // A picture standing on a block, its shortest side fig — the face,
-        // so a rival's ears / horns grow past it, as in the window.
-        const stand = (key, x, h, k = 1) => {
-            if (!this.textures.exists(key)) return null;
-            const im = this.add.image(x, -h, key).setOrigin(0.5, 1);
-            im.setScale(fig * k / Math.min(im.width, im.height));
-            box.add(im);
-            return im;
-        };
-        const figs = [stand(villainKey(villainIndexFor(this.level)), -bw, h1 * HT[1], v(P.RIVAL_SIZE, 1)),
-                      stand('podium_piggy', 0, h1 * HT[0])].filter(Boolean);
-        // THE LANE'S NAME (TITLE) over it, in the room left above the piggy.
-        let title = null;
-        if (P.TITLE) {
-            const room = ground - bandTop - (h1 * HT[0] + fig);
-            const size = Math.max(10, Math.round(Math.min(v(P.TITLE_SIZE, 22) * sc, room * 0.75)));
-            title = this.add.text(0, -(h1 * HT[0] + fig) - room / 2, P.TITLE.replace('{n}', i + 1), {
-                fontSize: size + 'px', fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT,
-                color: P.NUM_COLOR || '#ffffff', stroke: P.NUM_STROKE || '#2b2013',
-                strokeThickness: Math.max(3, Math.round(size * 0.14)) }).setOrigin(0.5);
-            box.add(title);
-        }
-        this._onRoad(box.setDepth(v(P.DEPTH, 6.5)));
+        const banner = this.add.container(0, 0, [bar, t]);
+        box.add(banner);
+        this._onRoad(box.setDepth(v(C.DEPTH, 6.5)));
         this.podiums[i] = box;
-        if (!done) return;
-        // THE STEPS AND NAME SHOW AT ONCE; only the rival and then the piggy
-        // drop onto theirs, fading in as they fall.
-        const fall = v(P.DROP_MS, 300), stag = v(P.STAGGER_MS, 180);
-        const drop = v(P.DROP, 30) * sc;
-        figs.forEach((im) => { im.landY = im.y; im.setAlpha(0).setY(im.y - drop); });
-        figs.forEach((im, k) => {
-            const delay = k * stag;
-            this.tweens.add({ targets: im, alpha: 1, duration: fall * 0.6, delay });
-            this.tweens.add({ targets: im, y: im.landY, duration: fall, delay, ease: 'Quad.easeIn' });
-        });
-        this.time.delayedCall(Math.max(0, figs.length - 1) * stag + fall, done);
+        if (!pop) return;
+        const ms = v(C.POP_MS, 380);
+        dim.setAlpha(0);
+        this.tweens.add({ targets: dim, alpha: 1, duration: ms });
+        banner.setScale(1.8).setAlpha(0);
+        this.tweens.add({ targets: banner, scale: 1, alpha: 1, duration: ms, ease: 'Back.easeOut', onComplete: done });
     }
 
     // THE LUNGE on lane i's final finish (RACE.LUNGE): just before the line
@@ -2371,6 +2348,24 @@ class GameScene extends Phaser.Scene {
                     this._winFx(i);
                     this._freezeAhead(i);
                     if (f.zoomed) this.time.delayedCall(v(Z.HOLD_MS, 250), () => this._laneZoom(i, false));
+                }
+                break;
+            }
+            case 'leave': {
+                // THE CARS DRIVE OFF to the right (RACE.CLOSE); the camera
+                // holds. Both gone: the banner.
+                const C = R.CLOSE || {}, acc = v(C.ACCEL, 500) * this.layoutConfig.platformScale;
+                const top = V * v(C.CRUISE, 0.6);
+                rc.leaveT += dt;
+                rc.vp = Math.min(top, rc.vp + acc * dt);
+                if (rc.leaveT * 1000 >= v(C.RIVAL_LAG_MS, 120)) rc.vr = Math.min(top, rc.vr + acc * dt);
+                rc.pw += rc.vp * dt;
+                rc.rw += rc.vr * dt;
+                const edge = this.carArea.x + this.carArea.width + W;
+                if (rc.pw - rc.cam > edge && rc.rw - rc.cam > edge) {
+                    rc.phase = 'done';
+                    rc.vp = rc.vr = 0;
+                    this._raceClose(i, true);
                 }
                 break;
             }
@@ -2979,7 +2974,7 @@ class GameScene extends Phaser.Scene {
     // A lane already won, as it ends up, put straight there (a rebuild): the
     // two cars and their badges — the line has long left the frame.
     _raceFinal(i) {
-        this._racePodium(i, null);
+        this._raceClose(i, false);
     }
 
     // A slot's figure: metres per second.
@@ -3406,8 +3401,8 @@ class GameScene extends Phaser.Scene {
         if (!car || !p) return;
         const ground = p.slotY + p.slotSize / 2;
         const x = t && t.visible ? t.x : car.x;
-        // FROM UNDER THE FIGURE, falling away from it.
-        const y = t && t.visible ? t.y + t.height / 2 : ground - car.carH;
+        // FROM THE FIGURE ITSELF, falling away from it.
+        const y = t && t.visible ? t.y - t.height * (t.originY - 0.5) : ground - car.carH;
         const LB = ((CONFIG.VILLAIN || {}).LABEL) || {};
         const f = this._onRoad(this._floatText('distPop', {
             fontSize: Math.max(10, Math.round(v(D.SIZE, 24) * sc)) + 'px',
@@ -3417,7 +3412,8 @@ class GameScene extends Phaser.Scene {
         }));
         const j = v(D.JITTER, 10) * sc;
         f.setText('−' + this._bigNum(Math.round(amt)) + (LB.SUFFIX !== undefined ? LB.SUFFIX : ' m'))
-            .setOrigin(0.5, 0).setDepth(4.3).setPosition(x + Phaser.Math.FloatBetween(-j, j), y);
+            .setOrigin(0.5).setDepth(t ? t.depth - 0.01 : 4.3) // under the figure it falls from
+            .setPosition(x + Phaser.Math.FloatBetween(-j, j), y);
         this.tweens.add({ targets: f, y: y + v(D.FALL, 34) * sc, duration: v(D.MS, 800), ease: 'Quad.easeIn' });
         this.tweens.add({ targets: f, alpha: 0, duration: v(D.MS, 800), ease: 'Cubic.easeIn',
             onComplete: () => this._floatTextDone(f) });
@@ -4125,10 +4121,13 @@ class GameScene extends Phaser.Scene {
             if (!p || p.slotX === undefined || this.slotHintSeen[i]) return;
             const lot = this.slotHints[i] = [];
             const size = p.slotSize || (100 * s);
+            // LANDSCAPE: from the grid's side (left), pointing right — the
+            // way the pig is dragged. Portrait keeps it on the right.
+            const side = this.isPortrait ? 1 : -1;
             // DRAWN, rather than drawn
             // ON: one shape, one outline, no art file, and it turns to face
             // whichever way the layout needs without a second drawing.
-            const arrow = this._makeArrow('w', len,
+            const arrow = this._makeArrow(side > 0 ? 'w' : 'e', len,
                     len * (H.W_FRAC !== undefined ? H.W_FRAC : 1.35),
                     P.FILL_COLOR || '#ffd251', P.STROKE_COLOR || '#6d5727',
                     (P.STROKE_WIDTH || 3) * s)
@@ -4140,23 +4139,22 @@ class GameScene extends Phaser.Scene {
             const run = (H.TRAVEL !== undefined ? H.TRAVEL : 0.193) * size;
             const gap = (H.SIDE_GAP !== undefined ? H.SIDE_GAP : 0.12) * size;
 
-            // THE PIG, ON THE FAR SIDE OF THE ARROW FROM THE SLOT — to its
-            // right — so "pig, then arrow, then slot" reads as "drag the pig in
+            // THE PIG, ON THE FAR SIDE OF THE ARROW FROM THE SLOT — so "pig, then arrow, then slot" reads as "drag the pig in
             // here". It rides along with the arrow (same relative travel from
             // each one's own start), so the two never drift apart. See
             // CONFIG.HINT_ICON.
             const iconSize = (HI.SIZE !== undefined ? HI.SIZE : 32) * s;
             const iconGap  = (HI.GAP !== undefined ? HI.GAP : 4) * s;
             let icon = null;
-            const x0 = p.slotX + size / 2 + gap + len / 2;
+            const x0 = p.slotX + side * (size / 2 + gap + len / 2);
             arrow.setPosition(x0, p.slotY);
             if (HI.ENABLED !== false && this.textures.exists('pig_hint')) {
-                icon = this.add.image(x0 + len / 2 + iconGap + iconSize / 2, p.slotY, 'pig_hint')
+                icon = this.add.image(x0 + side * (len / 2 + iconGap + iconSize / 2), p.slotY, 'pig_hint')
                     .setDisplaySize(iconSize, iconSize)
                     .setDepth(120)    // just behind its arrow (121)
                     .setAlpha(0);
             }
-            this.tweens.add({ targets: icon ? [arrow, icon] : arrow, x: `-=${run}`,
+            this.tweens.add({ targets: icon ? [arrow, icon] : arrow, x: side > 0 ? `-=${run}` : `+=${run}`,
                 duration: H.MS || 380, ease: H.EASE || 'Sine.easeInOut',
                 yoyo: true, repeat: -1 });
 

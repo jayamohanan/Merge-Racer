@@ -970,29 +970,25 @@ var CONFIG = {
             FIRST:      { TEXT: '1ST', FILL: '#ffd23f', INK: '#5a3b00' },
             SECOND:     { TEXT: '2ND', FILL: '#d7dde5', INK: '#2f3742' },
         },
-        // THE PODIUM once both cars of a lane have stopped: 1 / 2 / 3 blocks in
-        // the middle of the lane, the piggy on 1, the rival on 2, 3 left empty.
-        // The lane's cars go as it pops up; it stays till the next level.
-        PODIUM: {
+        // A LANE'S CLOSE once both cars have stopped: they drive off to the
+        // right, the lane dims and a "RACE n WON!" banner slams in. It stays
+        // till the next level.
+        CLOSE: {
             ENABLED:    true,
+            SETTLE_MS:  350,         // the cars at rest this long before they drive off
+            ACCEL:      500,         // px/s² @ design, the cars pulling away
+            CRUISE:     0.6,         // their top speed, × road speed: an easy drive off
+            RIVAL_LAG_MS: 120,       // the rival sets off this much after the piggy
             DEPTH:      6.5,
-            FILL:       0.63,        // share of the lane's height above the road it takes
-            HEIGHTS:    [1.12, 0.72, 0.5], // blocks 1, 2, 3, × a base height (block 1 a touch taller)
-            WIDTH:      1.15,        // a block's width, × block 1's height
-            FIGURE:     0.95,        // piggy / rival size, × a block's width
-            RIVAL_SIZE: 0.8,         // the rival on block 2, × FIGURE
-            // One look for every block, as the slots: blank = CELL's colours.
-            FILL_COLOR:   '',        // blank = CELL.FILLED_BG_COLOR
-            BORDER_COLOR: '',        // blank = CELL.INSET_SHADOW_COLOR
-            RADIUS:     12,          // px @ design, the blocks' top corners
-            NUM_COLOR:  '#ffffff',   // the 1 / 2 / 3
-            NUM_STROKE: '#2b2013',
-            TITLE:      'RACE {n}',  // the lane's name over the podium, {n} = 1..3 top down ('' = none)
-            TITLE_SIZE: 22,          // px @ design, at most (shrunk to fit the room above)
-            SETTLE_MS:  400,         // the cars at rest this long before it pops up
-            DROP:       30,          // px @ design the rival and piggy fall onto their steps
-            DROP_MS:    300,         // each one's fall
-            STAGGER_MS: 180,         // the rival first, the piggy this much after
+            DIM:        0.35,        // black over the lane, 0..1
+            TEXT:       'RACE {n} WON!', // {n} = 1..3 top down
+            SIZE:       30,          // px @ design, at most (shrunk to fit the lane)
+            COLOR:      '#ffd23f',
+            STROKE:     '#2b2013',
+            BAR_COLOR:  '#1d2430',   // the banner behind the text
+            BAR_ALPHA:  0.85,
+            CHECKER:    10,          // px @ design, a chequer square at the banner's ends
+            POP_MS:     380,         // the slam in
         },
     },
 
@@ -1083,11 +1079,11 @@ var CONFIG = {
         DIST_POP: {
             ENABLED:  true,
             SIZE:     24,        // px @ design
-            COLOR:    '#ffe27a',
-            STROKE:   '#2b2013',
+            COLOR:    '#1c1c1c', // as the lead figure: dark on a white outline
+            STROKE:   '#ffffff',
             STROKE_W: 4,         // px @ design
-            FALL:     34,        // px @ design it falls, from under the figure
-            MS:       800,
+            FALL:     40,        // px @ design it falls, from the figure
+            MS:       500,
             JITTER:   10,        // px @ design of sideways scatter, so ticks don't stack
         },
         // THE CAR GLIDES. The lead figure steps down by the piggy's value at
