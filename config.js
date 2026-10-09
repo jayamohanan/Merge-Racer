@@ -977,9 +977,10 @@ var CONFIG = {
             ENABLED:    true,
             DEPTH:      6.5,
             FILL:       0.63,        // share of the lane's height above the road it takes
-            HEIGHTS:    [1, 0.72, 0.5], // blocks 1, 2, 3, as shares of block 1's height
+            HEIGHTS:    [1.12, 0.72, 0.5], // blocks 1, 2, 3, × a base height (block 1 a touch taller)
             WIDTH:      1.15,        // a block's width, × block 1's height
             FIGURE:     0.95,        // piggy / rival size, × a block's width
+            RIVAL_SIZE: 0.8,         // the rival on block 2, × FIGURE
             // One look for every block, as the slots: blank = CELL's colours.
             FILL_COLOR:   '',        // blank = CELL.FILLED_BG_COLOR
             BORDER_COLOR: '',        // blank = CELL.INSET_SHADOW_COLOR
@@ -1062,6 +1063,8 @@ var CONFIG = {
         W:          440,       // px @ design, at most (and 86% of the race area)
         H:          210,       // px @ design, at most (and 86% of the race area)
         FIG:        84,        // px @ design: the pictures' face (shortest side)
+        PULSE:      1.08,      // the rival's picture swells to this × and back, over and over (1 = still)
+        PULSE_MS:   380,       // ms, one swell (the same back)
         SLANT:      0.12,      // the split's lean: its top and bottom this share of the height either side of centre
         VS_TEXT:    'VS',
         VS_COLOR:   '#ffffff',

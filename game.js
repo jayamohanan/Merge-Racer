@@ -1937,6 +1937,7 @@ class GameScene extends Phaser.Scene {
                 const im = this.add.image(0, top + th * (ranked ? 0.55 : 0.62), key).setOrigin(0.5, 1);
                 im.setScale(fig / Math.min(im.width, im.height));
                 c.add(im);
+                c.fig = im;
             }
             const fit = (t) => { if (t.width > tw * 0.92) t.setScale(tw * 0.92 / t.width); return t; };
             c.add(fit(this.add.text(0, top + th * (ranked ? 0.67 : 0.78), name, font(20, ink)).setOrigin(0.5)));
@@ -1969,11 +1970,16 @@ class GameScene extends Phaser.Scene {
         });
         vs.setScale(2.4).setAlpha(0);
         this.tweens.add({ targets: vs, scale: 1, alpha: 1, delay: popMs + 220, duration: 220, ease: 'Back.easeOut' });
+        // THE RIVAL PULSES (PULSE) from its feet, once it has slid in, till the card goes.
+        const pulse = right.fig && v(X.PULSE, 1.08) !== 1 ? this.tweens.add({ targets: right.fig,
+            scale: right.fig.scale * v(X.PULSE, 1.08), delay: popMs * 0.5 + 260, duration: v(X.PULSE_MS, 380),
+            ease: 'Sine.easeInOut', yoyo: true, repeat: -1 }) : null;
         let closed = false;
         const close = () => {
             if (closed) return;
             closed = true;
             timer.remove(false);
+            if (pulse) pulse.stop();
             done();
             this.tweens.add({ targets: panel, alpha: 0, y: panel.y - 16 * sc, duration: outMs, ease: 'Cubic.easeIn',
                 onComplete: () => panel.destroy() });
@@ -2131,7 +2137,7 @@ class GameScene extends Phaser.Scene {
         const HT = P.HEIGHTS || [1, 0.72, 0.5];
         const wK = v(P.WIDTH, 1.15), fK = v(P.FIGURE, 0.95);
         // Block 1 plus the figure on it fill FILL of the lane above the road.
-        const h1 = (ground - bandTop) * v(P.FILL, 0.9) / (1 + wK * fK);
+        const h1 = (ground - bandTop) * v(P.FILL, 0.9) / (HT[0] + wK * fK);
         const bw = h1 * wK, fig = bw * fK;
         const lw = Math.max(2, v(CL.INSET_BORDER_WIDTH, 3.5) * sc);
         const rad = Math.min(bw / 2, v(P.RADIUS, 12) * sc);
@@ -2153,21 +2159,21 @@ class GameScene extends Phaser.Scene {
         });
         // A picture standing on a block, its shortest side fig — the face,
         // so a rival's ears / horns grow past it, as in the window.
-        const stand = (key, x, h) => {
+        const stand = (key, x, h, k = 1) => {
             if (!this.textures.exists(key)) return null;
             const im = this.add.image(x, -h, key).setOrigin(0.5, 1);
-            im.setScale(fig / Math.min(im.width, im.height));
+            im.setScale(fig * k / Math.min(im.width, im.height));
             box.add(im);
             return im;
         };
-        const figs = [stand(villainKey(villainIndexFor(this.level)), -bw, h1 * HT[1]),
+        const figs = [stand(villainKey(villainIndexFor(this.level)), -bw, h1 * HT[1], v(P.RIVAL_SIZE, 1)),
                       stand('podium_piggy', 0, h1 * HT[0])].filter(Boolean);
         // THE LANE'S NAME (TITLE) over it, in the room left above the piggy.
         let title = null;
         if (P.TITLE) {
-            const room = ground - bandTop - (h1 + fig);
+            const room = ground - bandTop - (h1 * HT[0] + fig);
             const size = Math.max(10, Math.round(Math.min(v(P.TITLE_SIZE, 22) * sc, room * 0.75)));
-            title = this.add.text(0, -(h1 + fig) - room / 2, P.TITLE.replace('{n}', i + 1), {
+            title = this.add.text(0, -(h1 * HT[0] + fig) - room / 2, P.TITLE.replace('{n}', i + 1), {
                 fontSize: size + 'px', fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT,
                 color: P.NUM_COLOR || '#ffffff', stroke: P.NUM_STROKE || '#2b2013',
                 strokeThickness: Math.max(3, Math.round(size * 0.14)) }).setOrigin(0.5);
