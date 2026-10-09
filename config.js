@@ -1058,7 +1058,7 @@ var CONFIG = {
         DEPTH:      40,
         W:          440,       // px @ design, at most (and 86% of the race area)
         H:          210,       // px @ design, at most (and 86% of the race area)
-        FIG:        84,        // px @ design: the pictures' face (shortest side)
+        CAR_W:      0.92,      // each racer's car, × its half's width (capped by the height)
         PULSE:      1.08,      // the rival's picture swells to this × and back, over and over (1 = still)
         PULSE_MS:   380,       // ms, one swell (the same back)
         SLANT:      0.12,      // the split's lean: its top and bottom this share of the height either side of centre

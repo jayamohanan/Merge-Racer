@@ -1926,20 +1926,17 @@ class GameScene extends Phaser.Scene {
         bg.lineStyle(Math.max(2, 3 * sc), hexColor(ink), 1).strokeRoundedRect(-W / 2, -H / 2, W, H, rad);
         panel.add(bg);
 
-        // ONE SIDE: the picture standing (its shortest side the face, so
-        // ears / horns grow past it), the name under it, and the rank in a
-        // pill — the player's now, the rival's the one a win takes.
+        // ONE SIDE: the racer in its car, as on the road (_versusCar), the
+        // name under it, and the rank in a pill — the player's now, the
+        // rival's the one a win takes.
         const tw = W / 2 - pad - kx, th = H - pad * 2, top = -H / 2 + pad;
-        const fig = Math.min(v(X.FIG, 84) * sc, th * 0.42);
         const ranked = K.ENABLED !== false;
-        const side = (x, key, name, rank) => {
+        const side = (x, rival, name, rank) => {
             const c = this.add.container(x, 0);
-            if (this.textures.exists(key)) {
-                const im = this.add.image(0, top + th * (ranked ? 0.55 : 0.62), key).setOrigin(0.5, 1);
-                im.setScale(fig / Math.min(im.width, im.height));
-                c.add(im);
-                c.fig = im;
-            }
+            const im = this._versusCar(rival, tw * v(X.CAR_W, 0.92), th * (ranked ? 0.5 : 0.58));
+            im.y = top + th * (ranked ? 0.55 : 0.62);
+            c.add(im);
+            c.fig = im;
             const fit = (t) => { if (t.width > tw * 0.92) t.setScale(tw * 0.92 / t.width); return t; };
             c.add(fit(this.add.text(0, top + th * (ranked ? 0.67 : 0.78), name, font(20, ink)).setOrigin(0.5)));
             if (ranked) {
@@ -1954,8 +1951,8 @@ class GameScene extends Phaser.Scene {
         };
         const rivalR = this._rankAfter(this.level);
         const sx = W / 4 + kx / 2;
-        const left  = side(-sx, 'podium_piggy', X.YOU || 'YOU', this._rankAfter(this.level - 1));
-        const right = side(sx, villainKey(villainIndexFor(this.level)), this._racerName(rivalR), rivalR);
+        const left  = side(-sx, false, X.YOU || 'YOU', this._rankAfter(this.level - 1));
+        const right = side(sx, true, this._racerName(rivalR), rivalR);
         const vs = this.add.text(0, 0, X.VS_TEXT || 'VS', Object.assign(font(46, X.VS_COLOR || '#ffffff'),
             { stroke: ink, strokeThickness: Math.max(3, Math.round(6 * sc)) })).setOrigin(0.5);
         panel.add([left, right, vs]);
@@ -1989,6 +1986,28 @@ class GameScene extends Phaser.Scene {
         const hit = this.add.rectangle(0, 0, W, H, 0x000000, 0).setInteractive();
         hit.on('pointerdown', close);
         panel.add(hit);
+    }
+
+    // A RACER IN ITS CAR for the VS card: the piggy car with the piggy's
+    // head in the window, or this level's rival car with the rival's, facing
+    // left (nose to nose). At most maxW wide, maxH tall, standing on its
+    // origin. Wrapped, so the card's pulse can scale it without the flip.
+    _versusCar(rival, maxW, maxH) {
+        const K = (CONFIG.VILLAIN || {}).CAR || {}, v = (x, d) => (x !== undefined ? x : d);
+        const spec = rival ? this._getawaySpec() : null;
+        const C = spec || CONFIG.CAR || {}, F = (spec && spec.FACE) || K.FACE || {};
+        const bw = v(C.BODY_W, 254), gy = this._carGround(C);
+        const car = this._makeCar(0, 0, Math.min(maxH, maxW * gy / bw), spec);
+        car.onRoad = false;
+        car.setDepth(0);
+        const key = rival ? villainKey(villainIndexFor(this.level)) : 'podium_piggy';
+        if (this.textures.exists(key)) {
+            const face = this.add.image(-bw / 2 + v(F.X, 126), -gy + v(F.Y, 28) + v(F.H, 40) / 2, key);
+            face.setOrigin(0.5, 1).setScale(v(F.H, 40) / Math.min(face.frame.realWidth, face.frame.realHeight));
+            car.addAt(face, 1);
+        }
+        if (rival) car.scaleX = -car.scaleX;
+        return this.add.container(0, 0, [car]);
     }
 
     // LANE i's RIVAL FALLS onto its road: from HEIGHT of a lane's band above
