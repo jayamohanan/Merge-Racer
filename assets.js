@@ -61,7 +61,7 @@ function sharedAssets() {
     A.image('car_body', 'graphics/hero_car/car_01.webp');
     A.image('car_tyre', 'graphics/hero_car/car_tyre_01.webp');
     // The piggy that stands on the podium's top step (RACE.PODIUM), always this one.
-    A.image('podium_piggy', 'graphics/piggy/piggy_01.webp');
+    A.image('podium_piggy', 'graphics/piggy_character/piggy.webp');
     // The getaway cars — each design's body and tyre (CONFIG.VILLAIN.CAR.CARS).
     ((((CONFIG.VILLAIN || {}).CAR) || {}).CARS || []).forEach((c, i) => {
         A.image(getawayBodyKey(i + 1), c.BODY);

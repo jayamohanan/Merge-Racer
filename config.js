@@ -859,10 +859,13 @@ var CONFIG = {
             ABOVE:         40,
             BEHIND_COLOR:  '#1c1c1c',  // black, on a white outline
             BEHIND_STROKE: '#ffffff',
-            AHEAD_COLOR:   '#2fb84f',  // green, a shade deeper to hold on white
+            AHEAD_COLOR:   '#1c1c1c',  // black as while behind: the icon says who leads
             AHEAD_STROKE:  '#ffffff',
-            AHEAD_PREFIX: '+',
-            FLIP_SCALE:   1.3,         // the swell as it turns green
+            AHEAD_PREFIX: '',          // none: the icon says who leads
+            // THE LEAD RUN OUT: no 0 — the last figure swells to SCALE and
+            // fades over MS, and the figure is gone for the rest of the race.
+            VANISH: { MS: 260, SCALE: 1.6 },
+            FLIP_SCALE:   1.3,         // the leader picture's swell as the piggy takes the lead (the figure stays still)
             HIDE_AT_LINE: true,        // gone the moment the nose crosses (FINISH! is there); false = swell, hold, fade
             FREEZE_SCALE: 1.45,        // the swell as it stops at the line
             HOLD_MS:      1200,
@@ -1031,7 +1034,7 @@ var CONFIG = {
     // ── THE CHASE'S FEEDBACK ─────────────────────────────────────────────────
     // What makes each second of driving read like a hit.
     CHASE_FX: {
-        // THE DISTANCE POP: each tick, the metres just closed float up off
+        // THE DISTANCE POP: each tick, the metres just closed fall off
         // the lane's gap line ("−200 m") and fade — the chase's damage numbers.
         DIST_POP: {
             ENABLED:  true,
@@ -1039,7 +1042,7 @@ var CONFIG = {
             COLOR:    '#ffe27a',
             STROKE:   '#2b2013',
             STROKE_W: 4,         // px @ design
-            RISE:     34,        // px @ design it floats up
+            FALL:     34,        // px @ design it falls, from under the figure
             MS:       800,
             JITTER:   10,        // px @ design of sideways scatter, so ticks don't stack
         },

@@ -1505,7 +1505,12 @@ class GameScene extends Phaser.Scene {
         this.platforms.forEach((p, i) => {
             const lane = this.lanes[i], car = this.cars[i], vl = this.villains[i], t = this.laneLabels[i];
             if (!t || !t.scene) return;
-            if (!lane || !car || !vl || !vl.visible || (lane.caught && !lane.closing && !(lane.ahead && !lane.ahead.gone))) {
+            // NOT BEFORE THE RIVAL HAS A LEAD: no "0" while the lane waits.
+            // WON (the lead run out): gone once its pop-out has played
+            // (_vanishLabel) — never a 0, nor the piggy's margin.
+            const unstarted = !lane || (!lane.surged && !(lane.shown > 0));
+            const won = lane && lane.caught && !(this.time.now < (t._vanishUntil || 0));
+            if (unstarted || won || !car || !vl || !vl.visible) {
                 t.setVisible(false);
                 return;
             }
@@ -1524,6 +1529,8 @@ class GameScene extends Phaser.Scene {
         // then. See RACE.LEAD.
         const RL = (CONFIG.RACE || {}).LEAD || {};
         const ah = lane.ahead;
+        // WON: no 0 — the last figure pops away instead.
+        if (lane.caught || (lane.surged && lane.left <= 0)) { this._vanishLabel(i); return; }
         if (ah) {
             this._labelColor(t, RL.AHEAD_COLOR || '#2fb84f', RL.AHEAD_STROKE || '#ffffff');
             t.setText((RL.AHEAD_PREFIX !== undefined ? RL.AHEAD_PREFIX : '+') + this._bigNum(Math.floor(ah.v)) + suffix)
@@ -1876,7 +1883,8 @@ class GameScene extends Phaser.Scene {
     _showVersus(done) {
         const X = CONFIG.VERSUS || {}, K = CONFIG.RANK || {}, v = (x, d) => (x !== undefined ? x : d);
         const CA = this.carArea, sc = this.layoutConfig.platformScale;
-        if (X.ENABLED === false || !CA) { done(); return; }
+        // NOT ON LEVEL 1: the start tutorial has the screen then.
+        if (X.ENABLED === false || !CA || this.level <= 1) { done(); return; }
         const font = (px, color) => ({ fontSize: Math.max(9, Math.round(px * sc)) + 'px',
             fontFamily: CONFIG.FONT_FAMILY, fontStyle: CONFIG.FONT_WEIGHT, color });
         const ink = K.INK || '#2b2013';
@@ -2054,7 +2062,6 @@ class GameScene extends Phaser.Scene {
         const m = rc.m, W = m.W;
         lane.ahead = { v: lane.over || 0, rate: lane.overRate || 0, frozen: false, gone: false };
         this._setLaneLabel(i);
-        this._bumpLabel(i, v((R.LEAD || {}).FLIP_SCALE, 1.3));
 
         const pick = (x, d) => (Array.isArray(x) ? x[0] + (x[1] - x[0]) * Math.random() : v(x, d));
         const LG = R.LUNGE || {};
@@ -2535,6 +2542,19 @@ class GameScene extends Phaser.Scene {
         if (!t || !t.scene) return;
         this.tweens.add({ targets: t, alpha: 0, delay: v(RL.HOLD_MS, 1200), duration: v(RL.FADE_MS, 300),
             onComplete: () => { lane.ahead.gone = true; t.setAlpha(1); this._setLaneLabel(i); } });
+    }
+
+    // LANE i's FIGURE POPS AWAY (RACE.LEAD.VANISH): the lead run out, the
+    // last figure swells and fades instead of showing 0. Once.
+    _vanishLabel(i) {
+        const t = this.laneLabels[i], VN = ((CONFIG.RACE || {}).LEAD || {}).VANISH || {};
+        if (!t || !t.scene || t._vanishUntil || !t.visible) return;
+        const ms = VN.MS !== undefined ? VN.MS : 260;
+        t._vanishUntil = this.time.now + ms;
+        this.tweens.killTweensOf(t);
+        this.tweens.add({ targets: t, scale: VN.SCALE !== undefined ? VN.SCALE : 1.6, alpha: 0,
+            duration: ms, ease: 'Quad.easeOut',
+            onComplete: () => t.setVisible(false).setScale(1).setAlpha(1) });
     }
 
     // A quick swell and settle of lane i's figure.
@@ -3323,7 +3343,8 @@ class GameScene extends Phaser.Scene {
         if (!car || !p) return;
         const ground = p.slotY + p.slotSize / 2;
         const x = t && t.visible ? t.x : car.x;
-        const y = t && t.visible ? t.y - t.height / 2 : ground - car.carH;
+        // FROM UNDER THE FIGURE, falling away from it.
+        const y = t && t.visible ? t.y + t.height / 2 : ground - car.carH;
         const LB = ((CONFIG.VILLAIN || {}).LABEL) || {};
         const f = this._onRoad(this._floatText('distPop', {
             fontSize: Math.max(10, Math.round(v(D.SIZE, 24) * sc)) + 'px',
@@ -3333,9 +3354,10 @@ class GameScene extends Phaser.Scene {
         }));
         const j = v(D.JITTER, 10) * sc;
         f.setText('−' + this._bigNum(Math.round(amt)) + (LB.SUFFIX !== undefined ? LB.SUFFIX : ' m'))
-            .setOrigin(0.5, 1).setDepth(4.3).setPosition(x + Phaser.Math.FloatBetween(-j, j), y);
-        this.tweens.add({ targets: f, y: y - v(D.RISE, 34) * sc, alpha: 0,
-            duration: v(D.MS, 800), ease: 'Cubic.easeOut', onComplete: () => this._floatTextDone(f) });
+            .setOrigin(0.5, 0).setDepth(4.3).setPosition(x + Phaser.Math.FloatBetween(-j, j), y);
+        this.tweens.add({ targets: f, y: y + v(D.FALL, 34) * sc, duration: v(D.MS, 800), ease: 'Quad.easeIn' });
+        this.tweens.add({ targets: f, alpha: 0, duration: v(D.MS, 800), ease: 'Cubic.easeIn',
+            onComplete: () => this._floatTextDone(f) });
     }
 
     // HOW HARD LANE i IS BEING CHASED, 0..1: by how many seconds its piggy
