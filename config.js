@@ -294,8 +294,8 @@ var CONFIG = {
 
     COIN_COUNTER: {
         TEXT_SIZE: '48px',
-        TEXT_COLOR: '#f7ca42',
-        TEXT_STROKE_COLOR: '#7e5d11',
+        TEXT_COLOR: '#1c1c1c',         // dark on a white outline, as the lead figure
+        TEXT_STROKE_COLOR: '#ffffff',
         TEXT_STROKE_THICKNESS: 6,
         COIN_ICON_WIDTH: 40,
     },
@@ -844,6 +844,7 @@ var CONFIG = {
             DUST:          4,     // puffs as they lock
             DUST_EVERY_MS: 90,    // and one more each this while it slides
         },
+        FINISH_BRAKE:  false,    // true: past the line both cars brake to a stop, then drive off (the old finish); false: they drive straight on and out
         FINISH_ACCEL:  100,      // from the noses meeting till its nose is on the line, the piggy car keeps gaining speed on the rival, px/s² @ design
         // A CAP ON HOW FAST THE PIGGY CAR LOOKS, as a multiple of road speed.
         // A piggy far stronger than its level would otherwise close the gap and
@@ -988,7 +989,7 @@ var CONFIG = {
             BAR_COLOR:  '#1d2430',   // the banner behind the text
             BAR_ALPHA:  0.85,
             CHECKER:    10,          // px @ design, a chequer square at the banner's ends
-            POP_MS:     380,         // the slam in
+            POP_MS:     220,         // the slam in
         },
     },
 

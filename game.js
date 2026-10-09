@@ -2279,6 +2279,10 @@ class GameScene extends Phaser.Scene {
             }
             case 'finish': {
                 const f = rc.fin;
+                // NO BRAKING (RACE.FINISH_BRAKE false): both drive on at their
+                // speed; once the line is out of frame they drive off (the
+                // 'leave' step). True brings back the old stop below.
+                const brakes = R.FINISH_BRAKE === true;
                 // THE PIGGY CAR keeps its speed till wholly across the line,
                 // then brakes, steadily, to its spot.
                 // BRAKING runs on a fixed curve from where it began, so it
@@ -2290,7 +2294,7 @@ class GameScene extends Phaser.Scene {
                     if (b.t >= T) return [S, 0];
                     return [x0 + v0 * b.t - a * b.t * b.t / 2, v0 - a * b.t];
                 };
-                if (!f.braking && rc.pw >= f.across) {
+                if (brakes && !f.braking && rc.pw >= f.across) {
                     f.braking = true;
                     f.pBrake = rc.pw;
                     f.pv0 = rc.vp;
@@ -2328,7 +2332,7 @@ class GameScene extends Phaser.Scene {
                 // THE RIVAL keeps V till it has finished — its nose over the
                 // line — then brakes, steadily, to rest behind the winner. Its
                 // nose never passes the winner's.
-                if (!f.rBraking && rc.rw + m.eW / 2 >= f.flagW) {
+                if (brakes && !f.rBraking && rc.rw + m.eW / 2 >= f.flagW) {
                     f.rBraking = true;
                     f.rBrake = rc.rw;
                     f.rv0 = rc.vr;
@@ -2368,6 +2372,15 @@ class GameScene extends Phaser.Scene {
                     this._freezeAhead(i);
                     if (f.zoomed) this.time.delayedCall(v(Z.HOLD_MS, 250), () => this._laneZoom(i, false));
                 }
+                // NO BRAKING: won, the rival over the line too, and the line
+                // gone past the road's left edge — the camera stops there and
+                // the cars carry on out to the right at their speed.
+                const lineOff = CA.x - f.line.postW / 2 - v((R.LINE || {}).OFF_PAD, 8) * sc;
+                if (!brakes && f.won && rc.rw + m.eW / 2 >= f.flagW && f.flagW - target <= lineOff) {
+                    rc.phase = 'leave';
+                    rc.leaveT = 0;
+                    rc.keepSpeed = true;
+                }
                 break;
             }
             case 'leave': {
@@ -2376,12 +2389,16 @@ class GameScene extends Phaser.Scene {
                 const C = R.CLOSE || {}, acc = v(C.ACCEL, 500) * this.layoutConfig.platformScale;
                 const top = V * v(C.CRUISE, 0.6);
                 rc.leaveT += dt;
-                rc.vp = Math.min(top, rc.vp + acc * dt);
-                if (rc.leaveT * 1000 >= v(C.RIVAL_LAG_MS, 120)) rc.vr = Math.min(top, rc.vr + acc * dt);
+                // Straight on from the finish (keepSpeed): as they were.
+                if (!rc.keepSpeed) {
+                    rc.vp = Math.min(top, rc.vp + acc * dt);
+                    if (rc.leaveT * 1000 >= v(C.RIVAL_LAG_MS, 120)) rc.vr = Math.min(top, rc.vr + acc * dt);
+                }
                 rc.pw += rc.vp * dt;
                 rc.rw += rc.vr * dt;
-                const edge = this.carArea.x + this.carArea.width + W;
-                if (rc.pw - rc.cam > edge && rc.rw - rc.cam > edge) {
+                // GONE once wholly past the road's right edge.
+                const edge = this.carArea.x + this.carArea.width;
+                if (rc.pw - rc.cam - W / 2 + (car.lunge || 0) > edge && rc.rw - rc.cam - m.eW / 2 > edge) {
                     rc.phase = 'done';
                     rc.vp = rc.vr = 0;
                     this._raceClose(i, true);
@@ -3433,7 +3450,9 @@ class GameScene extends Phaser.Scene {
         f.setText('−' + this._bigNum(Math.round(amt)) + (LB.SUFFIX !== undefined ? LB.SUFFIX : ' m'))
             .setOrigin(0.5).setDepth(t ? t.depth - 0.01 : 4.3) // under the figure it falls from
             .setPosition(x + Phaser.Math.FloatBetween(-j, j), y);
-        this.tweens.add({ targets: f, y: y + v(D.FALL, 34) * sc, duration: v(D.MS, 800), ease: 'Quad.easeIn' });
+        // FAST OUT FROM BEHIND THE FIGURE, so it shows with the slot's pulse
+        // (_pulseRate, the same tick) rather than after it.
+        this.tweens.add({ targets: f, y: y + v(D.FALL, 34) * sc, duration: v(D.MS, 800), ease: 'Quad.easeOut' });
         this.tweens.add({ targets: f, alpha: 0, duration: v(D.MS, 800), ease: 'Cubic.easeIn',
             onComplete: () => this._floatTextDone(f) });
     }
