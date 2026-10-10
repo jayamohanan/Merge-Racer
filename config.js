@@ -709,6 +709,8 @@ var CONFIG = {
         CAR: {
             TINT:    '#eeeeee',    // a colour to tint the body with, or null for none
             SCALE:   1,            // of the piggy car's size
+            PREFETCH_AHEAD: 2,     // levels ahead whose car designs load in the background (only level 1's is in the startup load)
+            MIN_H:   0.9,          // never lower than this share of the piggy car's height: a low design is drawn longer instead (open ?cartest to compare)
             DEPTH:   3.9,          // behind the piggy car (CAR.DEPTH 4)
             // The head in the window, in the BODY's pixels (254 x 97): its
             // centre at X, Y and its face (the picture's shortest side) H —
@@ -835,6 +837,9 @@ var CONFIG = {
         // speed — is picked afresh per lane, so finishes differ: short is
         // close, long a clear win with the rival well back.
         AHEAD_MS:      [700, 2200],
+        // THE LEVEL'S LAST WIN always takes the far end of AHEAD_MS, and is
+        // pushed further if need be to cross this long after every other lane.
+        FINAL_MARGIN_MS: 300,
         // THE PIGGY CAR'S SKID at the end of its braking: its tyres lock for
         // the last LOCK_S of it and it slides on, its nose dips on its springs
         // and dust kicks up at the tyres. The rival just brakes.

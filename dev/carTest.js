@@ -4,9 +4,13 @@
 // One road across the whole screen at 75% of its height, the piggy car leading
 // and the chosen rival car trailing it, both at the race's road speed, forever.
 // The buttons along the top pick the rival car. Both cars are built the way the
-// game builds them (_makeCar, the rival at the piggy car's pixel scale, its
-// driver from FACE), and the road is the game's road: same line, marks and
-// bumps (_roadPattern, _bumpEvery), and the same suspension (_suspend).
+// game builds them (_makeCar, the rival at the piggy car's pixel scale raised
+// to MIN_H (_rivalCarH), its driver from FACE), and the road is the game's
+// road: same line, marks and bumps (_roadPattern, _bumpEvery), and the same
+// suspension (_suspend).
+//
+// ALL: every rival car beside a piggy car, standing still, to compare sizes.
+// The left / right arrow keys step through the cars too.
 //
 // It sits on the main camera over everything and swallows input, so the game
 // underneath is left untouched.
@@ -15,6 +19,7 @@ window.carTest = function (scene) {
     const v = (x, d) => (x !== undefined ? x : d);
     const CARS = ((CONFIG.VILLAIN || {}).CAR || {}).CARS || [];
     let pick = 1, objs = [], hero = null, rival = null, gfx = null, info = null, btns = [];
+    let all = false;
     let off = 0, set = null;
 
     const kill = (o) => { if (o && o.scene) o.destroy(); };
@@ -28,7 +33,7 @@ window.carTest = function (scene) {
         const spec = Object.assign({}, CARS[pick - 1], { bodyKey: getawayBodyKey(pick), tyreKey: getawayTyreKey(pick) });
         const F = spec.FACE || {};
         const gy = scene._carGround(spec), bw = v(spec.BODY_W, 254);
-        const en = scene._makeCar(0, groundY, gy * hero.scaleX * v(K.SCALE, 1), spec);
+        const en = scene._makeCar(0, groundY, scene._rivalCarH(spec, hero.scaleX * v(K.SCALE, 1)), spec);
         en.onRoad = false;
         en.setDepth(D + 2);
         const key = villainKey(1);
@@ -51,9 +56,47 @@ window.carTest = function (scene) {
         btns.forEach((b, i) => b.setBackgroundColor(i + 1 === pick ? '#e8a33a' : '#3b3f4a'));
     }
 
+    // THE LINE-UP: each rival car (as the game sizes it) left of a piggy car,
+    // the pairs in a grid as big as fits under the buttons. Still, no road.
+    function lineup(top) {
+        const W = scene.scale.width, H = scene.scale.height, K = (CONFIG.VILLAIN || {}).CAR || {};
+        const sc = scene.layoutConfig.platformScale;
+        const hgy = scene._carGround(), hbw = v((CONFIG.CAR || {}).BODY_W, 254);
+        // Each pair's size at hero scale 1 (art px): the widest rival.
+        let pw = 0, ph = hgy;
+        CARS.forEach((c) => {
+            const k = scene._rivalCarH(c, 1) / scene._carGround(c);
+            pw = Math.max(pw, v(c.BODY_W, 254) * k);
+            ph = Math.max(ph, scene._rivalCarH(c, 1));
+        });
+        // In art px: a gap between the pair's cars and between pairs.
+        const gap = 14, cellW = pw + hbw + 3 * gap, cellH = ph * 1.3;
+        let best = 0, cols = 1;
+        for (let c = 1; c <= CARS.length; c++) {
+            const rows = Math.ceil(CARS.length / c);
+            const s = Math.min((W - 8) / (c * cellW), (H - top - 8) / (rows * cellH));
+            if (s > best) { best = s; cols = c; }
+        }
+        const s = best;
+        CARS.forEach((c, i) => {
+            const col = i % cols, row = Math.floor(i / cols);
+            const x0 = 4 + (col * cellW + gap) * s, ground = top + (row + 1) * cellH * s;
+            const spec = Object.assign({}, c, { bodyKey: getawayBodyKey(i + 1), tyreKey: getawayTyreKey(i + 1) });
+            const en = add(scene._makeCar(0, ground, scene._rivalCarH(spec, s * v(K.SCALE, 1)), spec));
+            en.x = x0 + en.carW / 2;
+            const he = add(scene._makeCar(0, ground, hgy * s));
+            he.x = en.x + en.carW / 2 + gap * s + he.carW / 2;
+            [en, he].forEach((o) => { o.onRoad = false; o.setDepth(D + 2); });
+            gfx.lineStyle(1, 0x7e6044, 1).lineBetween(x0, ground, he.x + he.carW / 2, ground);
+            add(scene.add.text(x0, ground - cellH * s + 2, String(i + 1), {
+                fontSize: Math.max(10, Math.round(13 * sc)) + 'px', fontFamily: CONFIG.FONT_FAMILY, color: '#2b2013',
+            }).setDepth(D + 3));
+        });
+    }
+
     function build() {
         objs.forEach(kill); kill(rival);
-        objs = []; btns = []; rival = null;
+        objs = []; btns = []; rival = null; hero = null;
         const W = scene.scale.width, H = scene.scale.height;
         const sc = scene.layoutConfig.platformScale;
         const groundY = Math.round(H * 0.75);
@@ -68,6 +111,26 @@ window.carTest = function (scene) {
         add(scene.add.rectangle(0, 0, W, H, 0x000000, 0).setOrigin(0).setDepth(D).setInteractive());
         gfx = add(scene.add.graphics().setDepth(D + 1));
 
+        // THE BUTTONS, one per rival car and ALL last, wrapping across the top.
+        const fs = Math.max(12, Math.round(16 * sc)), size = fs * 2, pad = 6;
+        const perRow = Math.max(1, Math.floor((W - 2 * pad) / (size + pad)));
+        [...CARS, null].forEach((c, i) => {
+            const x = pad + (i % perRow) * (size + pad), y = pad + Math.floor(i / perRow) * (size + pad);
+            const b = add(scene.add.text(x, y, c ? String(i + 1) : 'ALL', {
+                fontSize: fs + 'px', fontFamily: CONFIG.FONT_FAMILY, color: '#ffffff',
+                backgroundColor: c ? '#3b3f4a' : (all ? '#e8a33a' : '#6b4a2a'), fixedWidth: size, fixedHeight: size, align: 'center',
+                padding: { top: Math.round((size - fs * 1.3) / 2) },
+            }).setDepth(D + 3).setInteractive({ useHandCursor: true }));
+            b.on('pointerdown', () => {
+                if (!c) { all = !all; build(); return; }
+                pick = i + 1;
+                if (all) { all = false; build(); } else makeRival(groundY);
+            });
+            if (c) btns.push(b);
+        });
+        const rows = Math.ceil((CARS.length + 1) / perRow);
+        if (all) { lineup(pad + rows * (size + pad)); return; }
+
         // THE PIGGY CAR, at its size in the game.
         const real = scene.cars && scene.cars[0];
         const h = real ? real.carH : 80 * sc;
@@ -75,20 +138,6 @@ window.carTest = function (scene) {
         hero.onRoad = false;
         hero.setDepth(D + 2);
 
-        // THE BUTTONS, one per rival car, wrapping across the top.
-        const fs = Math.max(12, Math.round(16 * sc)), size = fs * 2, pad = 6;
-        const perRow = Math.max(1, Math.floor((W - 2 * pad) / (size + pad)));
-        CARS.forEach((c, i) => {
-            const x = pad + (i % perRow) * (size + pad), y = pad + Math.floor(i / perRow) * (size + pad);
-            const b = add(scene.add.text(x, y, String(i + 1), {
-                fontSize: fs + 'px', fontFamily: CONFIG.FONT_FAMILY, color: '#ffffff',
-                backgroundColor: '#3b3f4a', fixedWidth: size, fixedHeight: size, align: 'center',
-                padding: { top: Math.round((size - fs * 1.3) / 2) },
-            }).setDepth(D + 3).setInteractive({ useHandCursor: true }));
-            b.on('pointerdown', () => { pick = i + 1; makeRival(groundY); });
-            btns.push(b);
-        });
-        const rows = Math.ceil(CARS.length / perRow);
         info = add(scene.add.text(pad, pad + rows * (size + pad), '', {
             fontSize: fs + 'px', fontFamily: CONFIG.FONT_FAMILY, color: '#2b2013',
         }).setDepth(D + 3));
@@ -155,8 +204,21 @@ window.carTest = function (scene) {
         }
     }
 
-    build();
+    // EVERY CAR DESIGN first: the game only loads them a level or two ahead.
+    const loads = [];
+    CARS.forEach((c, i) => {
+        loads.push(scene.assets.ensureImage(getawayBodyKey(i + 1), c.BODY));
+        loads.push(scene.assets.ensureImage(getawayTyreKey(i + 1), c.TYRE));
+    });
+    Promise.all(loads).then(build);
     scene.events.on('update', step);
+    // THE ARROW KEYS step through the cars (wrapping), out of ALL if in it.
+    window.addEventListener('keydown', (e) => {
+        if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || !CARS.length || !info) return;
+        e.preventDefault();
+        pick = (pick - 1 + (e.key === 'ArrowRight' ? 1 : -1) + CARS.length) % CARS.length + 1;
+        if (all) { all = false; build(); } else makeRival(Math.round(scene.scale.height * 0.75));
+    });
     // A RESIZE rebuilds it, once the game's own relayout has had its turn.
     scene.scale.on('resize', () => scene.time.delayedCall(300, build));
 };

@@ -171,6 +171,20 @@ class AssetManager {
         for (let l = level; l < level + n && l <= top; l++) this.prefetchBattery(l);
     }
 
+    // THE RIVAL CAR DESIGNS for this level and the next
+    // VILLAIN.CAR.PREFETCH_AHEAD, in the background. Missing at its level
+    // (a slow connection), the piggy car's art stands in (_getawaySpec).
+    prefetchCars(level) {
+        const n = ((CONFIG.VILLAIN || {}).CAR || {}).PREFETCH_AHEAD;
+        const ahead = Math.max(1, n !== undefined ? n : 2);
+        for (let l = Math.max(1, level); l <= level + ahead; l++) {
+            const c = getawayCarFor(l);
+            if (!c) return;
+            this.ensureImage(getawayBodyKey(c.n), c.BODY).catch(() => {});
+            this.ensureImage(getawayTyreKey(c.n), c.TYRE).catch(() => {});
+        }
+    }
+
     // THE RIVALS' HEADS round a level: the last one (the rank list's row
     // below) and the next VILLAIN.PREFETCH_AHEAD (the rank list's racers
     // ahead, and the next VS card). In the background; already loaded or in
@@ -885,10 +899,12 @@ class GameScene extends Phaser.Scene {
             else if (a.frame)       this.load.spritesheet(a.key, a.url, a.frame);
             else                    this.load.image(a.key, a.url);
         }
-        // A SAVE past level 1: that level's rival is needed from the start.
+        // A SAVE past level 1: that level's rival and car are needed from the start.
         if (this._save && this._save.level > 1) {
             const i = villainIndexFor(this._save.level);
             this.load.image(villainKey(i), villainPath(i));
+            const c = getawayCarFor(this._save.level);
+            if (c) { this.load.image(getawayBodyKey(c.n), c.BODY); this.load.image(getawayTyreKey(c.n), c.TYRE); }
         }
 
         // A file that 404s leaves the cache entry simply absent, and whatever
@@ -961,6 +977,8 @@ class GameScene extends Phaser.Scene {
         else this.spawnBatteryInGrid(0, 0, CONFIG.BATTERY_START_LEVEL);
         this.assets.prefetchAhead(this.highestBatteryLevel + 1);
         this.assets.prefetchRivals(this.level);
+        this.assets.prefetchCars(this.level);
+        this.assets.ensureImage(PODIUM_PIGGY.key, PODIUM_PIGGY.url).catch(() => {});
         this.createButtons();
         if (save) this.updateSpawnButton();
         this.time.addEvent({
@@ -1582,8 +1600,9 @@ class GameScene extends Phaser.Scene {
         lane.caught = true;
         lane.left = 0;
         lane.finishing = true;
-        lane.final = this.lanes.every((l) => l.caught);
-        if (lane.final) this._levelTurning = true;
+        // The level's last win (lane.final) is picked when its finish starts
+        // (_raceFinish), so it is the last to cross.
+        if (this.lanes.every((l) => l.caught)) this._levelTurning = true;
         lane.closing = true;   // the car's glide reaching 0 starts the finish (_raceStep)
     }
 
@@ -1591,6 +1610,7 @@ class GameScene extends Phaser.Scene {
     _nextLevel() {
         this.level += 1;
         this.assets.prefetchRivals(this.level);
+        this.assets.prefetchCars(this.level);
         this.lanes = this._levelLanes(this.level);
         this._buildVillains(true);
         this._levelTurning = false;
@@ -1611,6 +1631,16 @@ class GameScene extends Phaser.Scene {
         return this.textures.exists(spec.bodyKey) && this.textures.exists(spec.tyreKey) ? spec : null;
     }
 
+    // A RIVAL CAR'S HEIGHT, ground to roof, at pixel scale k — but never
+    // lower than MIN_H of the piggy car's at that scale. The car arts are
+    // all about as wide, so a low design would otherwise come out small;
+    // raised to MIN_H, it comes out long instead.
+    _rivalCarH(spec, k) {
+        const K = (CONFIG.VILLAIN || {}).CAR || {};
+        const min = K.MIN_H !== undefined ? K.MIN_H : 0.9;
+        return Math.max(this._carGround(spec), min * this._carGround()) * k;
+    }
+
     // LANE i's RIVAL CAR: the level's design, the rival's head in the
     // driver's window — standing on the road at `ground`, behind the piggy
     // car. Its x is set by the race (_raceSetup).
@@ -1626,7 +1656,7 @@ class GameScene extends Phaser.Scene {
         // AT THE PIGGY CAR'S PIXEL SCALE — the two arts drawn alike, so a
         // lower, longer car comes out lower and longer, not stretched to match.
         const k  = (car ? car.scaleX : p.slotSize / gy) * v(K.SCALE, 1);
-        const en = this._makeCar(0, ground, gy * k, C).setDepth(v(K.DEPTH, 3.9));
+        const en = this._makeCar(0, ground, this._rivalCarH(C, k), C).setDepth(v(K.DEPTH, 3.9));
         if (K.TINT) en.bodyImg.setTint(hexColor(K.TINT));
 
         // THE DRIVER: the rival's head in the window.
@@ -1805,7 +1835,8 @@ class GameScene extends Phaser.Scene {
         // folds the last lunge in, and it would show all next race.
         car.lunge = 0;
         const m = this._raceMarks(i), V = this._raceV();
-        const rc = this.race[i] = { cam: 0, pw: m.home, rw: m.home, vp: 0, vr: 0,
+        // NOSE TO NOSE at the start: a longer rival's extra length lies behind.
+        const rc = this.race[i] = { cam: 0, pw: m.home, rw: m.home + (m.W - m.eW) / 2, vp: 0, vr: 0,
                                     phase: 'wait', entering: !!enter, m };
         if (lane.caught) {
             const g = this._raceGeom(i);
@@ -2066,8 +2097,10 @@ class GameScene extends Phaser.Scene {
         rc.t = 0;
         rc.delay = v(R.LEAD_DELAY_MS, 300) / 1000;
         rc.pw0 = rc.pw; rc.rw0 = rc.rw;
+        // The gap opens from the start's (noses level) to the race's.
+        rc.gap0 = rc.rw0 - rc.pw0;
         rc.TR = Math.max(0.05, v(R.LEAD_RIVAL_MS, 350) / 1000);
-        rc.TP = rc.TR + 2 * Math.max(1, m.rivalAt - m.home) / this._raceV();
+        rc.TP = rc.TR + 2 * Math.max(1, m.rivalAt - m.home - rc.gap0) / this._raceV();
         lane.shown = 0;
         this._setLaneLabel(i);
         en.wind = 0;
@@ -2085,6 +2118,20 @@ class GameScene extends Phaser.Scene {
         this.race[i].phase = 'race';
         this._setLaneLabel(i);
         this.tweens.add({ targets: en, wind: 0, duration: ((R.WIND || {}).FADE_MS) || 350 });
+    }
+
+    // A CAR'S RUN-IN TO THE LINE, from speed v0 gathering speed as the
+    // finish does (FINISH_ACCEL, up to MAX_SPEED × V): 'time' the seconds to
+    // cover distance x, 'dist' the distance covered in x seconds.
+    _finishRun(x, v0, want) {
+        const R = CONFIG.RACE || {}, V = this._raceV();
+        const a = (R.FINISH_ACCEL !== undefined ? R.FINISH_ACCEL : 100) * this.layoutConfig.platformScale;
+        v0 = Math.max(1, v0);
+        const vmax = Math.max(v0, (R.MAX_SPEED !== undefined ? R.MAX_SPEED : 2.5) * V);
+        const tc = a > 0 ? (vmax - v0) / a : 0, dc = v0 * tc + a * tc * tc / 2;
+        if (want === 'dist') return x <= tc ? v0 * x + a * x * x / 2 : dc + vmax * (x - tc);
+        if (x <= 0) return 0;
+        return x <= dc ? (-v0 + Math.sqrt(v0 * v0 + 2 * a * x)) / a : tc + (x - dc) / vmax;
     }
 
     // THE FINISH, from the noses meeting. The figure turns green (the margin,
@@ -2111,7 +2158,9 @@ class GameScene extends Phaser.Scene {
 
         const pick = (x, d) => (Array.isArray(x) ? x[0] + (x[1] - x[0]) * Math.random() : v(x, d));
         const LG = R.LUNGE || {};
-        const final = !!lane.final;
+        // THE FINAL: the last lane to start its finish, every lane won.
+        lane.final = this.lanes.every((l) => l.caught && !l.closing);
+        const final = lane.final;
         const surge = final && LG.ENABLED !== false ? pick(LG.SURGE, 0.06) * W : 0;
         car.lunge = 0;
 
@@ -2121,7 +2170,21 @@ class GameScene extends Phaser.Scene {
         // THE LINE ON THE ROAD: AHEAD_MS of the car's speed past its nose —
         // and never so close that it would appear in view rather than come in.
         const vp0 = Math.max(rc.vp, this._raceV());
-        let flagW = rc.pw + W / 2 + vp0 * pick(R.AHEAD_MS, 1500) / 1000;
+        // The final's line: always the far end of AHEAD_MS, and further if
+        // need be, so it crosses FINAL_MARGIN_MS after every other lane.
+        const aheadMs = final && Array.isArray(R.AHEAD_MS) ? R.AHEAD_MS[1] : pick(R.AHEAD_MS, 1500);
+        let flagW = rc.pw + W / 2 + vp0 * aheadMs / 1000;
+        if (final) {
+            let last = 0;
+            this.race.forEach((o, j) => {
+                const of = o && o.phase === 'finish' && o.fin;
+                if (j === i || !of || of.won) return;
+                const d = of.flagW - (o.pw + o.m.W / 2 + (this.cars[j].lunge || 0));
+                last = Math.max(last, this._finishRun(d, o.vp, 'time'));
+            });
+            if (last > 0) flagW = Math.max(flagW, rc.pw + W / 2 +
+                this._finishRun(last + v(R.FINAL_MARGIN_MS, 300) / 1000, vp0, 'dist'));
+        }
         flagW = Math.max(flagW, rc.cam + CA.x + CA.width + line.flagW + line.postW * 2);
         // THE END: past the line the cars roll on till it has left the road's
         // frame — the camera, following, carries it out past the left edge
@@ -2266,7 +2329,8 @@ class GameScene extends Phaser.Scene {
                 rc.vr = V * Math.min(1, t / rc.TR);
                 rc.vp = V * Math.min(1, t / rc.TP);
                 target = rc.pw - m.home;
-                lane.shown = lane.total * Math.max(0, Math.min(1, (rc.rw - rc.pw) / Math.max(1, m.rivalAt - m.home)));
+                lane.shown = lane.total * Math.max(0, Math.min(1, (rc.rw - rc.pw - (rc.gap0 || 0)) /
+                    Math.max(1, m.rivalAt - m.home - (rc.gap0 || 0))));
                 this._setLaneLabel(i);
                 if (t >= rc.TP) this._raceLeadDone(i);
                 break;
