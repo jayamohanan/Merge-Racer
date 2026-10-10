@@ -636,6 +636,40 @@ var CONFIG = {
         // level down to EVERY_MIN at level MIN_AT_LEVEL and after.
         BUMPS: { H: 6, W: 80, EVERY: 2400, EVERY_MIN: 1000, MIN_AT_LEVEL: 30 },
         SAMPLE: 4,               // px @ design between points of the drawn road
+
+        // THE TERRAIN: each level's road its own shape, for variety — not
+        // difficulty (it is only drawn; speed and leads are untouched). A
+        // road is a run of SHAPES with flat GAPs between, picked from the
+        // level's MOOD. Fixed per level and lane (hashed), so a rebuild draws
+        // the same road. Flat for FLAT_START at the start, and flat from the
+        // screen's right edge once a lane's finish begins.
+        //   L   the shape's length, px @ design ([min, max])
+        //   H   its height, px @ design (up is +; a dip is negative)
+        //   RAMP  a plateau's climb and descent, px @ design
+        //   N   a washboard's bumps
+        TERRAIN: {
+            ENABLED:     true,
+            FLAT_START:  1200,       // px @ design flat at a level's start (at least the screen's width)
+            GAP:         [250, 700], // px @ design of flat road between shapes
+            FLAT_LEVELS: 2,          // levels 1..this: no terrain at all (the bumps only)
+            CALM_EVERY:  5,          // and every this-th level after: a breather
+            SHAPES: {
+                swell:     { L: [600, 900],  H: [8, 14] },
+                hill:      { L: [380, 600],  H: [14, 22] },
+                dip:       { L: [320, 480],  H: [-12, -7] },
+                plateau:   { L: [700, 1100], H: [12, 18], RAMP: [220, 300] },
+                washboard: { L: [300, 450],  H: [3, 5], N: [3, 5] },
+                straight:  { L: [400, 900] },   // just more flat road
+            },
+            // THE MOODS: how often each shape comes up (weights). A level's
+            // mood is hashed from its number, never the same twice running.
+            MOODS: {
+                calm:    { straight: 3, swell: 2 },
+                rolling: { swell: 3, dip: 2, straight: 1 },
+                hilly:   { hill: 3, plateau: 2, straight: 1 },
+                bumpy:   { washboard: 3, dip: 1, swell: 1, straight: 1 },
+            },
+        },
     },
 
     // ── THE SUSPENSION ───────────────────────────────────────────────────────

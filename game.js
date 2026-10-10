@@ -1351,6 +1351,7 @@ class GameScene extends Phaser.Scene {
         if (!this.carArea || !this.lanes) return;
         const key = villainKey(villainIndexFor(this.level));
         const sc  = L.platformScale;
+        this._terrainReset();
 
         this.platforms.forEach((p, i) => {
             const lane   = this.lanes[i];
@@ -1424,6 +1425,129 @@ class GameScene extends Phaser.Scene {
         return Math.max(20, (a + (b - a) * t) * this.layoutConfig.platformScale);
     }
 
+    // ================================================================
+    // THE TERRAIN — see CONFIG.ROAD.TERRAIN
+    // ================================================================
+    // Positions along a lane's road (`u`) are px @ design from where the
+    // level's road began (T.t0, its scroll then), so they hold over a rebuild.
+
+    // A NEW LEVEL'S TERRAIN: where its roads begin, nothing flattened yet.
+    // Kept over a rebuild of the same level.
+    _terrainReset() {
+        const T = this._terrain;
+        if (T && T.level === this.level) return;
+        const TE = (CONFIG.ROAD || {}).TERRAIN || {};
+        const sc = this.layoutConfig.platformScale, B = this.layoutConfig.partB;
+        // FLAT AT THE START: at least the whole road on screen, and some.
+        const wide = (B.x + B.width - this.carArea.x) / sc + 300;
+        this._terrain = {
+            level: this.level, t0: this.roadOffsets.slice(),
+            start: Math.max(TE.FLAT_START !== undefined ? TE.FLAT_START : 1200, wide),
+            flat: [Infinity, Infinity, Infinity], sets: [null, null, null],
+        };
+    }
+
+    // THE LEVEL'S MOOD: none (flat) for the first FLAT_LEVELS, calm every
+    // CALM_EVERY-th level, else hashed — and never the last level's hashed
+    // mood twice running.
+    _terrainMood(level) {
+        const TE = (CONFIG.ROAD || {}).TERRAIN || {};
+        const M = TE.MOODS || {}, names = Object.keys(M);
+        if (!names.length || level <= (TE.FLAT_LEVELS || 0)) return null;
+        const every = TE.CALM_EVERY || 0;
+        if (M.calm && every && level % every === 0) return M.calm;
+        const at = (l) => Math.floor(this._cellHash(13, l, 51) * names.length) % names.length;
+        let k = at(level);
+        if (k === at(level - 1)) k = (k + 1) % names.length;
+        return M[names[k]];
+    }
+
+    // LANE i's SHAPES, made on to at least `upTo` (u). Each: its start `s`,
+    // length `L`, height `h`, kind, and a plateau's ramp `r` / washboard's `n`.
+    _terrainGrow(i, upTo) {
+        const T = this._terrain;
+        const TE = (CONFIG.ROAD || {}).TERRAIN || {};
+        let set = T.sets[i];
+        if (!set) set = T.sets[i] = { shapes: [], end: T.start, k: 0, mood: this._terrainMood(T.level) };
+        const S = TE.SHAPES || {}, gap = TE.GAP || [250, 700];
+        const mood = set.mood || {}, kinds = Object.keys(mood).filter((n) => S[n] && mood[n] > 0);
+        const sum = kinds.reduce((a, n) => a + mood[n], 0);
+        if (!sum) { set.end = Infinity; return set; }
+        const lerp = (r, t) => (Array.isArray(r) ? r[0] + (r[1] - r[0]) * t : (r || 0));
+        while (set.end < upTo) {
+            const h = (s) => this._cellHash(i * 31 + 5, T.level * 97 + set.k, s);
+            set.k++;
+            let r = h(1) * sum, kind = kinds[kinds.length - 1];
+            for (const n of kinds) { if ((r -= mood[n]) < 0) { kind = n; break; } }
+            const D = S[kind], s = set.end + lerp(gap, h(2)), L = Math.max(40, lerp(D.L, h(3)));
+            set.end = s + L;
+            if (kind === 'straight') continue;
+            set.shapes.push({
+                kind, s, L, h: lerp(D.H, h(4)),
+                r: Math.min(L * 0.45, lerp(D.RAMP || [200, 200], h(5))),
+                n: Math.max(1, Math.round(lerp(D.N || [3, 3], h(6)))),
+            });
+        }
+        return set;
+    }
+
+    // LANE i's SHAPE under `u`, or null. Shapes starting at or past the
+    // lane's flattening (its finish) are gone.
+    _terrainShapeAt(i, u) {
+        const T = this._terrain;
+        if (!T || !(u >= T.start)) return null;
+        const list = this._terrainGrow(i, u).shapes;
+        let lo = 0, hi = list.length - 1, at = -1;
+        while (lo <= hi) {   // the last shape starting at or before u
+            const mid = (lo + hi) >> 1;
+            if (list[mid].s <= u) { at = mid; lo = mid + 1; } else hi = mid - 1;
+        }
+        const sh = at >= 0 ? list[at] : null;
+        return sh && u < sh.s + sh.L && sh.s < T.flat[i] ? sh : null;
+    }
+
+    // LANE i's HEIGHT at a screen x, px (up is +) — or null with no terrain.
+    // `x0`: the road's left edge, where the scroll counts from.
+    _terrainFn(i, x0) {
+        const TE = (CONFIG.ROAD || {}).TERRAIN || {};
+        const T = this._terrain;
+        if (!T || TE.ENABLED === false) return null;
+        const sc = this.layoutConfig.platformScale;
+        const base = this.roadOffsets[i] - x0 - T.t0[i];
+        return (x) => {
+            const sh = this._terrainShapeAt(i, (x + base) / sc);
+            if (!sh) return 0;
+            const t = ((x + base) / sc - sh.s) / sh.L;
+            let k;
+            if (sh.kind === 'plateau') {
+                // Up its ramp, flat along the top, down its ramp.
+                const r = sh.r / sh.L;
+                k = t < r ? 0.5 * (1 - Math.cos(Math.PI * t / r))
+                  : t > 1 - r ? 0.5 * (1 - Math.cos(Math.PI * (1 - t) / r)) : 1;
+            } else {
+                k = 0.5 * (1 - Math.cos(2 * Math.PI * (sh.kind === 'washboard' ? sh.n : 1) * t));
+            }
+            return sh.h * k * sc;
+        };
+    }
+
+    // LANE i's FINISH HAS BEGUN: no new shape from the screen's right edge
+    // on, so the line, the braking and the stops are all on the flat.
+    // Returns the world x where the road is flat for good (past any shape
+    // still on screen), or -Infinity.
+    _terrainSettle(i, rc) {
+        const TE = (CONFIG.ROAD || {}).TERRAIN || {};
+        const T = this._terrain;
+        if (!T || TE.ENABLED === false) return -Infinity;
+        const sc = this.layoutConfig.platformScale, B = this.layoutConfig.partB;
+        const x0 = this.carArea.x;
+        const base = rc.road0 - x0 - T.t0[i];   // u (px) = world x + base
+        const edge = (B.x + B.width - x0 + rc.road0 + rc.cam - T.t0[i]) / sc;
+        const sh = this._terrainShapeAt(i, edge);
+        T.flat[i] = Math.min(T.flat[i], edge);
+        return sh ? (sh.s + sh.L) * sc - base : -Infinity;
+    }
+
     // THE ROADS, redrawn each frame — the line (with its bumps), the marks,
     // slid back by how far that lane has driven and faded out before its
     // villain — and each car's suspension stepped over the road under it.
@@ -1462,8 +1586,9 @@ class GameScene extends Phaser.Scene {
             // under both.
             // THE ROAD'S HEIGHT at a screen x (px, up is +): the bumps, each a
             // smooth rise, slid back with the marks.
+            const terr = this._terrainFn(i, x0);
             const heightAt = (x) => {
-                let hgt = 0;
+                let hgt = terr ? terr(x) : 0;
                 for (const b of set.bumps) {
                     const w = bumpW * b.w;
                     // The nearest copy of this bump, spacing by spacing.
@@ -2222,6 +2347,8 @@ class GameScene extends Phaser.Scene {
                 this._finishRun(last + v(R.FINAL_MARGIN_MS, 300) / 1000, vp0, 'dist'));
         }
         flagW = Math.max(flagW, rc.cam + CA.x + CA.width + line.flagW + line.postW * 2);
+        // ON THE FLAT: past the last of the terrain (_terrainSettle).
+        flagW = Math.max(flagW, this._terrainSettle(i, rc) + line.postW + 20 * sc);
         // THE END: past the line the cars roll on till it has left the road's
         // frame — the camera, following, carries it out past the left edge
         // (LINE.OFF_PAD beyond it) — and stop where the end picture has them.
