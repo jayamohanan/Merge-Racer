@@ -1781,6 +1781,9 @@ class GameScene extends Phaser.Scene {
     _raceSetup(i, enter) {
         const lane = this.lanes[i], car = this.cars[i], en = this.villains[i];
         if (!lane || !car || !en) return;
+        // NO PUSH CARRIED OVER: a finish that drives off (no braking) never
+        // folds the last lunge in, and it would show all next race.
+        car.lunge = 0;
         const m = this._raceMarks(i), V = this._raceV();
         const rc = this.race[i] = { cam: 0, pw: m.home, rw: m.home, vp: 0, vr: 0,
                                     phase: 'wait', entering: !!enter, m };
@@ -2144,14 +2147,15 @@ class GameScene extends Phaser.Scene {
     }
 
     // THE CARS ARE GONE from lane i: the dim and the banner (RACE.CLOSE),
-    // then the lane is done. It stays till the next level (_clearRace).
+    // then the lane is done. `rivalOn`: the rival still to come — left
+    // showing, to drive past under the banner. It stays till the next level (_clearRace).
     // No `pop`: put straight there (a rebuild).
-    _raceClose(i, pop) {
+    _raceClose(i, pop, rivalOn) {
         const C = (CONFIG.RACE || {}).CLOSE || {}, v = (x, d) => (x !== undefined ? x : d);
         const L = this.layoutConfig, B = L.partB, CA = this.carArea;
         const lane = this.lanes[i];
         const done = () => { if (pop) { lane.finishing = false; this._turnWhenDone(); } };
-        [this.cars[i], this.villains[i], ...(this.raceBadges[i] || [])]
+        [this.cars[i], rivalOn ? null : this.villains[i], ...(this.raceBadges[i] || [])]
             .forEach((o) => { if (o && o.scene) o.setVisible(false); });
         if (!B || !CA) { done(); return; }
         const sc = L.platformScale, bh = L.slotBandH;
@@ -2372,11 +2376,12 @@ class GameScene extends Phaser.Scene {
                     this._freezeAhead(i);
                     if (f.zoomed) this.time.delayedCall(v(Z.HOLD_MS, 250), () => this._laneZoom(i, false));
                 }
-                // NO BRAKING: won, the rival over the line too, and the line
-                // gone past the road's left edge — the camera stops there and
-                // the cars carry on out to the right at their speed.
+                // NO BRAKING: won and the line gone past the road's left edge
+                // — the camera stops there and the cars carry on out to the
+                // right at their speed. NOT WAITING FOR THE RIVAL: a strong
+                // piggy can finish far ahead; it comes on behind the banner.
                 const lineOff = CA.x - f.line.postW / 2 - v((R.LINE || {}).OFF_PAD, 8) * sc;
-                if (!brakes && f.won && rc.rw + m.eW / 2 >= f.flagW && f.flagW - target <= lineOff) {
+                if (!brakes && f.won && f.flagW - target <= lineOff) {
                     rc.phase = 'leave';
                     rc.leaveT = 0;
                     rc.keepSpeed = true;
@@ -2396,12 +2401,19 @@ class GameScene extends Phaser.Scene {
                 }
                 rc.pw += rc.vp * dt;
                 rc.rw += rc.vr * dt;
-                // GONE once wholly past the road's right edge.
+                // GONE once wholly past the road's right edge. The banner
+                // comes as soon as the piggy car is gone; the rival drives on
+                // under it till it is gone too.
                 const edge = this.carArea.x + this.carArea.width;
-                if (rc.pw - rc.cam - W / 2 + (car.lunge || 0) > edge && rc.rw - rc.cam - m.eW / 2 > edge) {
+                const rivalGone = rc.rw - rc.cam - m.eW / 2 > edge;
+                if (!rc.closed && rc.pw - rc.cam - W / 2 + (car.lunge || 0) > edge) {
+                    rc.closed = true;
+                    this._raceClose(i, true, !rivalGone);
+                }
+                if (rc.closed && rivalGone) {
                     rc.phase = 'done';
                     rc.vp = rc.vr = 0;
-                    this._raceClose(i, true);
+                    en.setVisible(false);
                 }
                 break;
             }
@@ -2527,6 +2539,10 @@ class GameScene extends Phaser.Scene {
             cam.applyZoom = () => { cam.setZoom(st.z); cam.centerOn(st.x, st.y); };
             cam.applyZoom();
             this._zoomCams[i] = cam;
+            // FILTERED AT ONCE: a camera's id is reused once it is removed,
+            // so an earlier zoom's skips are still on the objects — the car
+            // among them — and this frame would draw without it.
+            this._zoomFilter();
             this.tweens.add({ targets: st, z, x: tx, y: ty, duration: v(Z.IN_MS, 350),
                 ease: 'Sine.easeInOut', onUpdate: cam.applyZoom });
         } else {
