@@ -737,11 +737,11 @@ var CONFIG = {
             // the ears over the roof. With none here (or the art missing) the
             // piggy car's body stands in, with FACE above.
             CARS: [
-                getawayCarArt(1, 256,  91, 53, [29, 60], [175, 60], { X: 135, Y: 19, H: 38 }),   // dark sedan
-                getawayCarArt(2, 207, 104, 56, [20, 65], [126, 65], { X: 100, Y: 27, H: 36 }),   // yellow city car
-                getawayCarArt(3, 256,  72, 56, [22, 34], [163, 34], { X: 110, Y: 17, H: 30 }),   // red muscle car
-                getawayCarArt(4, 256, 119, 65, [29, 75], [156, 75], { X: 113, Y: 40, H: 40 }),   // green SUV
-                getawayCarArt(5, 256, 100, 58, [28, 63], [173, 63], { X: 135, Y: 27, H: 36 }),   // teal classic
+                getawayCarArt(1, 207, 104, 56, [20, 65], [126, 65], { X: 100, Y: 27, H: 36 }),   // yellow city car
+                getawayCarArt(2, 256,  72, 56, [22, 34], [163, 34], { X: 110, Y: 17, H: 30 }),   // red muscle car
+                getawayCarArt(3, 256, 119, 65, [29, 75], [156, 75], { X: 113, Y: 40, H: 40 }),   // green SUV
+                getawayCarArt(4, 256, 100, 58, [28, 63], [173, 63], { X: 135, Y: 27, H: 36 }),   // teal classic
+                getawayCarArt(5, 256,  91, 53, [29, 60], [175, 60], { X: 135, Y: 19, H: 38 }),   // dark sedan
                 getawayCarArt(6, 256,  77, 56, [19, 39], [157, 39], { X: 112, Y: 17, H: 30 }),   // blue sports car
                 getawayCarArt(7, 256, 101, 54, [30, 67], [176, 67], { X: 143, Y: 30, H: 36 }),   // orange wagon
                 getawayCarArt(8, 256, 114, 60, [25, 75], [169, 75], { X: 138, Y: 34, H: 40 }),   // cream city car
