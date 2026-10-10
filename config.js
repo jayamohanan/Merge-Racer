@@ -706,7 +706,7 @@ var CONFIG = {
         // piggy car. It rides the road with it: tyres spinning, bumps and
         // suspension.
         CAR: {
-            TINT:    null,         // a colour to tint the body with, or null for none
+            TINT:    '#eeeeee',    // a colour to tint the body with, or null for none
             SCALE:   1,            // of the piggy car's size
             DEPTH:   3.9,          // behind the piggy car (CAR.DEPTH 4)
             // The head in the window, in the BODY's pixels (254 x 97): its
@@ -1020,10 +1020,10 @@ var CONFIG = {
         OUT_MS:         220,
         DEPTH:     40,
         W:         440,        // px @ design, at most (and 86% of the race area)
-        ROW_H:     72,         // px @ design, at most: a row, tall enough for the racer's sprite
+        ROW_H:     144,        // px @ design, at most: a row, tall enough for the racer's sprite
         AHEAD:     3,          // racers listed above the player (grey till reached)
         BEHIND:    1,          // racers beaten earlier listed below the rival just beaten
-        TITLE:       'RANK UP!',
+        TITLE:       'LEADERBOARD',
         CHAMP_TEXT:  'CHAMPION! #1',
         YOU:         'YOU',
         NEXT:        'NEXT',
@@ -1037,7 +1037,9 @@ var CONFIG = {
         NEXT_COLOR:  '#6b4a2a',
         LOCKED_TINT: '#7a7266',   // racers not yet reached: their sprite as a silhouette of this colour
         UNLOCK_MS:    350,        // the next opponent's silhouette filling in with colour
-        BEATEN_ALPHA: 0.45,       // the row of the rival just beaten, once passed (0-1)
+        DIM:          0.35,       // opponents' rows darkened by this (0-1): all but the rival just raced, then all but the next one
+        NEXT_MS:      2500,       // the next opponent highlighted this long after the climb, before the card goes
+        NEXT_RING:    '#ffffff',  // the highlighted next opponent's outline
         // Racer names, fixed per rank.
         NAMES: ['Turbo Tess', 'Dusty Dan', 'Nitro Nia', 'Rusty Rex', 'Zippy Zoe', 'Blaze Bo',
                 'Skid Sam', 'Vroom Val', 'Drift Dex', 'Rocket Ray', 'Gravel Gus', 'Piston Pia',
@@ -1070,6 +1072,7 @@ var CONFIG = {
         RIVAL_FILL: '#f26b5b', // the rival's half
         RANK_FILL:  '#2b2013', // the rank pills: the player's now, the rival's the one a win takes
         RANK_COLOR: '#ffffff',
+        RANK_SIZE:  26,        // px @ design, the rank in its pill (the name is 20)
     },
 
     // ── THE CHASE'S FEEDBACK ─────────────────────────────────────────────────

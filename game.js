@@ -1944,8 +1944,8 @@ class GameScene extends Phaser.Scene {
             c.add(fit(this.add.text(0, top + th * (ranked ? 0.67 : 0.78), name, font(20, ink)).setOrigin(0.5)));
             if (ranked) {
                 const rt = fit(this.add.text(0, top + th * 0.86, '#' + this._bigNum(rank),
-                    font(18, X.RANK_COLOR || '#ffffff')).setOrigin(0.5));
-                const pw = rt.displayWidth + 20 * sc, ph = rt.displayHeight + 2 * sc;
+                    font(v(X.RANK_SIZE, 26), X.RANK_COLOR || '#ffffff')).setOrigin(0.5));
+                const pw = rt.displayWidth + 28 * sc, ph = rt.displayHeight + 6 * sc;
                 const pill = this.add.graphics().fillStyle(hexColor(X.RANK_FILL || ink), 1)
                     .fillRoundedRect(-pw / 2, rt.y - ph / 2, pw, ph, ph / 2);
                 c.add([pill, rt]);
@@ -2745,6 +2745,15 @@ class GameScene extends Phaser.Scene {
                 body.add(im);
             }
             body.add(this.add.text(figX + fig / 2 + 12 * sc, 0, name, font(22, tc)).setOrigin(0, 0.5));
+            // THE SHADE (DIM) darkening the row, and the RING round the
+            // next opponent while it is highlighted. Both off to begin.
+            if (!you) {
+                c.shade = this.add.graphics().fillStyle(0x000000, 1)
+                    .fillRoundedRect(-rw / 2, -rh / 2, rw, rh, rad).setAlpha(0);
+                c.ring = this.add.graphics().lineStyle(Math.max(2, 3 * sc), hexColor(K.NEXT_RING || '#ffffff'), 1)
+                    .strokeRoundedRect(-rw / 2, -rh / 2, rw, rh, rad).setAlpha(0);
+                body.add([c.shade, c.ring]);
+            }
             c.rankText = rt;
             return c;
         };
@@ -2759,28 +2768,37 @@ class GameScene extends Phaser.Scene {
             const others = [];
             let beaten = null, nextUp = null;
             // r is the rank a racer held before this level; those from oldR
-            // on were beaten earlier and sit one place lower (r + 1), faded.
+            // on were beaten earlier and sit one place lower (r + 1), darkened.
             for (let r = newR - ahead; r < oldR + behind; r++) {
                 const o = row(r, this._racerName(r), false, spriteFor(r), r < newR);
                 if (r === newR) beaten = o;
                 if (r === newR - 1) nextUp = o;
-                if (r >= oldR) o.body.setAlpha(v(K.BEATEN_ALPHA, 0.45));
                 o.rank = r; o.shown = r;
                 panel.add(o); others.push(o);
             }
             you = row(oldR, K.YOU || 'YOU', true, 'podium_piggy');
             panel.add(you);
+            // THE RIVAL JUST RACED IN FULL: every other opponent darkened.
+            const dim = v(K.DIM, 0.35);
+            for (const o of others) if (o !== beaten) o.shade.setAlpha(dim);
             // UNLOCKED: once YOU passes the rival just beaten, its row fades
             // and the next opponent's silhouette fills in with colour.
             let unlocked = false;
             const unlock = () => {
                 unlocked = true;
                 const ms = v(K.UNLOCK_MS, 350);
-                if (beaten) this.tweens.add({ targets: beaten.body, alpha: v(K.BEATEN_ALPHA, 0.45), duration: ms });
+                if (beaten) this.tweens.add({ targets: beaten.shade, alpha: dim, duration: ms });
+                // THE NEXT OPPONENT lit up and highlighted (ring and a
+                // pulse) until the card goes (NEXT_MS).
+                if (nextUp) {
+                    this.tweens.add({ targets: nextUp.shade, alpha: 0, duration: ms });
+                    this.tweens.add({ targets: nextUp.ring, alpha: 1, duration: ms });
+                    panel.nextPulse = this.tweens.add({ targets: nextUp.body, scale: 1.05, duration: 380, yoyo: true, repeat: -1,
+                        ease: 'Sine.easeInOut' });
+                }
                 if (nextUp && nextUp.fig) {
                     this.tweens.add({ targets: nextUp.fig, alpha: 1, duration: ms, ease: 'Quad.easeOut' });
                     this.tweens.add({ targets: nextUp.sil, alpha: 0, duration: ms });
-                    this.tweens.add({ targets: nextUp.body, scale: 1.05, duration: ms / 2, yoyo: true, ease: 'Quad.easeOut' });
                 }
             };
             place = (s) => {
@@ -2819,6 +2837,7 @@ class GameScene extends Phaser.Scene {
             timers.forEach((t) => t.remove(false));
             if (counter) counter.stop();
             settle();
+            if (panel.nextPulse) panel.nextPulse.stop();
             next();
             this.tweens.add({ targets: panel, alpha: 0, y: panel.y - 16 * sc, duration: outMs, ease: 'Cubic.easeIn',
                 onComplete: () => { panel.destroy(); if (this._rankPanel === panel) this._rankPanel = null; } });
@@ -2832,7 +2851,9 @@ class GameScene extends Phaser.Scene {
                     this.tweens.add({ targets: you, scale: 1.06, duration: 120, yoyo: true, ease: 'Quad.easeOut' });
                 } });
         }
-        timers.push(this.time.delayedCall(champ ? popMs + holdMs : slideAt + slideMs + holdMs, close));
+        // With a next opponent to show, it stays highlighted NEXT_MS.
+        const after = !champ && newR > 1 && ahead > 0 ? Math.max(holdMs, v(K.NEXT_MS, 2500)) : holdMs;
+        timers.push(this.time.delayedCall(champ ? popMs + holdMs : slideAt + slideMs + after, close));
         const hit = this.add.rectangle(0, 0, W, H, 0x000000, 0).setInteractive();
         hit.on('pointerdown', close);
         panel.add(hit);
