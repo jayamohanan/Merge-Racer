@@ -1192,8 +1192,33 @@ class GameScene extends Phaser.Scene {
             const h = Math.min(A.width * v(C.WIDTH_FRAC, 0.45) / bodyW * carH,
                                p.slotSize * v(C.MAX_H_FRAC, 1)) * v(C.SCALE, 1);
             const w = h / carH * bodyW;
-            return this._makeCar(left + w / 2, p.slotY + p.slotSize / 2, h);
+            const car = this._makeCar(left + w / 2, p.slotY + p.slotSize / 2, h);
+            this._seatDriver(car);
+            return car;
         });
+    }
+
+    // THE PIGGY CAR'S DRIVER in its window (CAR.DRIVER): the side view, its
+    // bottom cut at the window's bottom edge and its top at the glass's
+    // top. Rides the body with the suspension (car.face, _suspend).
+    _seatDriver(car) {
+        const C = CONFIG.CAR || {}, Dr = C.DRIVER, v = (x, d) => (x !== undefined ? x : d);
+        if (!Dr || !this.textures.exists(Dr.KEY)) return;
+        const bw = v(C.BODY_W, 254), gy = this._carGround(C);
+        const face = this.add.image(-bw / 2 + Dr.X, -gy + Dr.S, Dr.KEY).setOrigin(0.5, 0);
+        const fw = face.frame.realWidth, fh = face.frame.realHeight;
+        const s = Dr.H / fh, cut = v(Dr.CROP, 0);
+        face.setScale(s);
+        face.y -= Dr.H * (1 - cut);
+        // Off the top and sides: whatever is outside the glass.
+        const x0 = Dr.X - fw * s / 2;
+        const top = Math.max(0, (Dr.TOP - (Dr.S - Dr.H * (1 - cut))) / s);
+        const l = Dr.LEFT !== undefined ? Math.max(0, (Dr.LEFT - x0) / s) : 0;
+        const r = Dr.RIGHT !== undefined ? Math.min(fw, (Dr.RIGHT - x0) / s) : fw;
+        face.setCrop(l, top, r - l, fh * (1 - cut) - top);
+        car.addAt(face, 1);
+        car.face = face;
+        car.faceBaseY = face.y;
     }
 
     // Where the tyres meet the ground, in the body's own pixels: the lowest
@@ -1664,10 +1689,8 @@ class GameScene extends Phaser.Scene {
             // Anchored at its BOTTOM CENTRE, on the window's sill — so it pops
             // up from the sill when it peeks (_peekFaces), and sinks back to
             // it. Its shortest side is the face, H; ears / horns grow past.
-            const sill = -gy + v(F.Y, 28) + v(F.H, 40) / 2;
-            const face = this.add.image(-bw / 2 + v(F.X, 126), sill, key);
-            const fw = face.frame.realWidth, fh = face.frame.realHeight;
-            face.setOrigin(0.5, 1).setScale(v(F.H, 40) / Math.min(fw, fh));
+            const face = this.add.image(-bw / 2 + v(F.X, 126), -gy + v(F.S, v(F.Y, 28) + v(F.H, 40) / 2), key);
+            this._seatHead(face, F);
             face.baseScale = face.scaleX;
             en.addAt(face, 1);
             en.face = face;
@@ -1678,6 +1701,19 @@ class GameScene extends Phaser.Scene {
             en.peek = { v: 0, want: 0, t: 0, up: false, mi: this._nextMilestone(i) };
         }
         return en;
+    }
+
+    // A DRIVER'S HEAD, placed at the window's bottom edge (its y on entry):
+    // sized from FACE.H x HEAD.SCALE by its shortest side, and sunk behind
+    // the door — its bottom CROP below the edge, cut off. Origin stays the
+    // full picture's bottom centre, so the peek's squash still works.
+    _seatHead(face, F) {
+        const Hd = ((CONFIG.VILLAIN || {}).CAR || {}).HEAD || {}, v = (x, d) => (x !== undefined ? x : d);
+        const fw = face.frame.realWidth, fh = face.frame.realHeight;
+        const s = v(F.H, 40) * v(Hd.SCALE, 1) / Math.min(fw, fh), cut = v(Hd.CROP, 0);
+        face.setOrigin(0.5, 1).setScale(s);
+        if (cut > 0) face.setCrop(0, 0, fw, fh * (1 - cut));
+        face.y += fh * s * cut;
     }
 
     // Lane i's share of its distance covered, 0..1.
@@ -2056,8 +2092,8 @@ class GameScene extends Phaser.Scene {
         car.setDepth(0);
         const key = rival ? villainKey(villainIndexFor(this.level)) : 'podium_piggy';
         if (this.textures.exists(key)) {
-            const face = this.add.image(-bw / 2 + v(F.X, 126), -gy + v(F.Y, 28) + v(F.H, 40) / 2, key);
-            face.setOrigin(0.5, 1).setScale(v(F.H, 40) / Math.min(face.frame.realWidth, face.frame.realHeight));
+            const face = this.add.image(-bw / 2 + v(F.X, 126), -gy + v(F.S, v(F.Y, 28) + v(F.H, 40) / 2), key);
+            this._seatHead(face, F);
             car.addAt(face, 1);
         }
         if (rival) car.scaleX = -car.scaleX;
@@ -2852,7 +2888,7 @@ class GameScene extends Phaser.Scene {
         // down, the list scrolls past YOU and each racer drops a place as it
         // is passed. YOU goes from the bottom slot to its final one. Rows
         // fade at the window's edges (no masks in this build).
-        let you = null, place = null;
+        let you = null, place = null, unlock = null;
         if (!champ) {
             const top = ahead;
             const others = [];
@@ -2873,11 +2909,10 @@ class GameScene extends Phaser.Scene {
             const passed = v(K.PASSED_ALPHA, 0.45);
             for (const o of others) if (o.rank >= oldR) o.body.setAlpha(passed);
             if (beaten) beaten.warm.setAlpha(1);
-            // UNLOCKED: once YOU passes the rival just beaten, its row fades
-            // and the next opponent's silhouette fills in with colour.
-            let unlocked = false;
-            const unlock = () => {
-                unlocked = true;
+            // UNLOCKED: once YOU has reached its row and bounced (the slide's
+            // end), the rival just beaten fades and the next opponent's
+            // silhouette fills in with colour.
+            unlock = () => {
                 const ms = v(K.UNLOCK_MS, 350);
                 // Everyone just passed: grey and see-through.
                 for (const o of others) {
@@ -2899,7 +2934,6 @@ class GameScene extends Phaser.Scene {
                 }
             };
             place = (s) => {
-                if (!unlocked && s <= newR + 0.5) unlock();
                 const ys = top + travel * (s - newR) / Math.max(1, oldR - newR);
                 you.y = slotY(ys);
                 you.rankText.setText('#' + this._bigNum(Math.round(s)));
@@ -2945,7 +2979,8 @@ class GameScene extends Phaser.Scene {
                 onUpdate: (tw) => place(tw.getValue()),
                 onComplete: () => {
                     settle();
-                    this.tweens.add({ targets: you, scale: 1.06, duration: 120, yoyo: true, ease: 'Quad.easeOut' });
+                    this.tweens.add({ targets: you, scale: 1.06, duration: 120, yoyo: true, ease: 'Quad.easeOut',
+                        onComplete: () => { if (!closed && unlock) unlock(); } });
                 } });
         }
         // With a next opponent to show, it stays highlighted NEXT_MS.
@@ -2997,6 +3032,23 @@ class GameScene extends Phaser.Scene {
         return line;
     }
 
+    // THE BURST at x, y on the road: a ring with rays, swelling and fading.
+    // The win's (_winFx), and the overtake's as the noses meet; `k` its size.
+    _burst(x, y, k = 1) {
+        const W = (CONFIG.RACE || {}).WIN || {}, v = (n, d) => (n !== undefined ? n : d);
+        const sc = this.layoutConfig.platformScale;
+        const burst = this._onRoad(this.add.graphics({ x, y }).setDepth(v(W.DEPTH, 6)).setScale(k));
+        burst.lineStyle(Math.max(2, 5 * sc), 0xffffff, 1).strokeCircle(0, 0, 14 * sc);
+        burst.lineStyle(Math.max(2, 4 * sc), 0xffe27a, 1);
+        const rays = v(W.RAYS, 10);
+        for (let k = 0; k < rays; k++) {
+            const a = k / rays * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+            burst.lineBetween(c * 22 * sc, s * 22 * sc, c * 40 * sc, s * 40 * sc);
+        }
+        this.tweens.add({ targets: burst, scale: 4.5 * k, alpha: 0, duration: v(W.RING_MS, 520),
+            ease: 'Cubic.easeOut', onComplete: () => burst.destroy() });
+    }
+
     // THE WIN, as lane i's winner's nose crosses the line: a burst ring and
     // rays, confetti, FINISH!, a shake, the winner's hop and dust, the line's
     // punch, and the prize flying to the coin counter.
@@ -3009,17 +3061,7 @@ class GameScene extends Phaser.Scene {
         const x = line && line.scene ? line.x : car.x + car.carW / 2;
         const y = ground - car.carH * 0.75;
 
-        // THE BURST: a ring with rays, swelling and fading.
-        const burst = this._onRoad(this.add.graphics({ x, y }).setDepth(D));
-        burst.lineStyle(Math.max(2, 5 * sc), 0xffffff, 1).strokeCircle(0, 0, 14 * sc);
-        burst.lineStyle(Math.max(2, 4 * sc), 0xffe27a, 1);
-        const rays = v(W.RAYS, 10);
-        for (let k = 0; k < rays; k++) {
-            const a = k / rays * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
-            burst.lineBetween(c * 22 * sc, s * 22 * sc, c * 40 * sc, s * 40 * sc);
-        }
-        this.tweens.add({ targets: burst, scale: 4.5, alpha: 0, duration: v(W.RING_MS, 520),
-            ease: 'Cubic.easeOut', onComplete: () => burst.destroy() });
+        this._burst(x, y);
 
         // CONFETTI: up and out from the line, then down to the road.
         const cols = (W.COLORS || ['#ffd23f', '#ff5a5f', '#3ddc97', '#4cc9f0']).map(hexColor);

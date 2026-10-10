@@ -61,6 +61,8 @@ function sharedAssets() {
     // (see CONFIG.CAR / _makeCar).
     A.image('car_body', 'graphics/hero_car/car_01.webp');
     A.image('car_tyre', 'graphics/hero_car/car_tyre_01.webp');
+    // Its driver: the piggy in side view (CONFIG.CAR.DRIVER).
+    A.image('piggy_side', 'graphics/piggy_character/piggy_side.webp');
     // THE FIRST RIVAL CAR DESIGN only (CONFIG.VILLAIN.CAR.CARS), body and
     // tyre. The rest come in the background (AssetManager.prefetchCars).
     const car1 = getawayCarFor(1);

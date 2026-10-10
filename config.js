@@ -716,6 +716,14 @@ var CONFIG = {
             // centre at X, Y and its face (the picture's shortest side) H —
             // ears / horns grow past it.
             FACE: { X: 126, Y: 28, H: 40 },
+            // THE HEAD ON EVERY CAR (and the VS card): grown past FACE.H, and
+            // sunk behind the door — its bottom CROP cut off exactly at the
+            // window's bottom edge (FACE.S, measured from each car's art; or
+            // Y + H/2 without it). The extra size grows up, over the roof.
+            HEAD: {
+                SCALE: 1.35,       // x FACE.H
+                CROP:  0.1,        // share of the head's height hidden below the window's bottom edge
+            },
             // THE LOOK BACK: the driver stays down out of sight — only the
             // window shows — and pops up from the sill to glance back only at
             // milestones, as the piggy car runs down each share of the lead in
@@ -734,40 +742,40 @@ var CONFIG = {
             // TYRE_SIZE square tyres with their TOP-LEFT corners at TYRES
             // (rear, front) — and the driver's head (FACE, as above) in this
             // body's own driver's window: its cut edge on the window's sill,
-            // the ears over the roof. With none here (or the art missing) the
+            // the ears over the roof; S is the glass's bottom edge. With none here (or the art missing) the
             // piggy car's body stands in, with FACE above.
             CARS: [
-                getawayCarArt(1, 207, 104, 56, [20, 65], [126, 65], { X: 100, Y: 27, H: 36 }),   // yellow city car
-                getawayCarArt(2, 256,  72, 56, [22, 34], [163, 34], { X: 110, Y: 17, H: 30 }),   // red muscle car
-                getawayCarArt(3, 256, 119, 65, [29, 75], [156, 75], { X: 113, Y: 40, H: 40 }),   // green SUV
-                getawayCarArt(4, 256, 100, 58, [28, 63], [173, 63], { X: 135, Y: 27, H: 36 }),   // teal classic
-                getawayCarArt(5, 256,  91, 53, [29, 60], [175, 60], { X: 135, Y: 19, H: 38 }),   // dark sedan
-                getawayCarArt(6, 256,  77, 56, [19, 39], [157, 39], { X: 112, Y: 17, H: 30 }),   // blue sports car
-                getawayCarArt(7, 256, 101, 54, [30, 67], [176, 67], { X: 143, Y: 30, H: 36 }),   // orange wagon
-                getawayCarArt(8, 256, 114, 60, [25, 75], [169, 75], { X: 138, Y: 34, H: 40 }),   // cream city car
-                getawayCarArt(9, 304, 102, 64, [38, 62], [216, 62], { X: 168, Y: 28, H: 38 }),   // red pickup
-                getawayCarArt(10, 307, 129, 64, [34, 85], [220, 85], { X: 214, Y: 42, H: 44 }),  // blue van
-                getawayCarArt(11, 288,  73, 49, [30, 43], [208, 43], { X: 150, Y: 18, H: 30 }),  // purple limo
-                getawayCarArt(12, 256, 150, 68, [30, 103], [162, 103], { X: 125, Y: 54, H: 50 }), // mint bubble car
-                getawayCarArt(13, 280,  81, 53, [32, 47], [196, 47], { X: 122, Y: 24, H: 34 }),  // red fastback
-                getawayCarArt(14, 256, 126, 65, [28, 82], [160, 82], { X: 122, Y: 39, H: 40 }),  // green off-roader
-                getawayCarArt(15, 256,  84, 48, [32, 52], [181, 52], { X: 138, Y: 22, H: 34 }),  // cream sedan
-                getawayCarArt(16, 256,  87, 58, [30, 52], [171, 52], { X: 118, Y: 25, H: 32 }),  // yellow coupe
-                getawayCarArt(17, 300, 125, 69, [28, 85], [205, 85], { X: 190, Y: 37, H: 44 }),  // blue minivan
-                getawayCarArt(18, 252,  66, 45, [36, 37], [178, 37], { X: 115, Y: 16, H: 28 }),  // maroon coupe
-                getawayCarArt(19, 256,  97, 56, [18, 57], [167, 57], { X: 112, Y: 24, H: 34 }),  // red hatchback
-                getawayCarArt(20, 270,  94, 54, [34, 60], [184, 60], { X: 158, Y: 23, H: 36 }),  // blue pickup
-                getawayCarArt(21, 256,  97, 45, [35, 67], [181, 67], { X: 145, Y: 27, H: 34 }),  // olive classic
-                getawayCarArt(22, 260,  73, 53, [34, 35], [175, 35], { X: 132, Y: 18, H: 28 }),  // orange sports car
-                getawayCarArt(23, 260,  89, 47, [35, 59], [185, 59], { X: 148, Y: 25, H: 34 }),  // grey estate
-                getawayCarArt(24, 280, 139, 65, [35, 97], [189, 97], { X: 168, Y: 45, H: 44 }),  // yellow van
-                getawayCarArt(25, 256,  94, 53, [27, 58], [177, 58], { X: 120, Y: 23, H: 36 }),  // teal hatchback
-                getawayCarArt(26, 256,  73, 47, [29, 44], [181, 44], { X: 140, Y: 17, H: 28 }),  // dark green sedan
-                getawayCarArt(27, 256,  94, 55, [26, 61], [180, 61], { X: 145, Y: 28, H: 36 }),  // red estate
-                getawayCarArt(28, 256,  93, 63, [17, 50], [185, 50], { X: 115, Y: 18, H: 28 }),  // purple hot rod
-                getawayCarArt(29, 256,  88, 56, [21, 53], [174, 53], { X: 137, Y: 22, H: 34 }),  // copper crossover
-                getawayCarArt(30, 256, 105, 53, [24, 72], [177, 72], { X: 142, Y: 33, H: 38 }),  // yellow taxi
-                getawayCarArt(31, 256,  77, 56, [26, 43], [178, 43], { X: 115, Y: 20, H: 28 }),  // navy coupe
+                getawayCarArt(1, 207, 104, 56, [20, 65], [126, 65], { X: 100, Y: 27, H: 36, S: 45 }),   // yellow city car
+                getawayCarArt(2, 256,  72, 56, [22, 34], [163, 34], { X: 110, Y: 17, H: 30, S: 32 }),   // red muscle car
+                getawayCarArt(3, 256, 119, 65, [29, 75], [156, 75], { X: 113, Y: 40, H: 40, S: 59 }),   // green SUV
+                getawayCarArt(4, 256, 100, 58, [28, 63], [173, 63], { X: 135, Y: 27, H: 36, S: 44 }),   // teal classic
+                getawayCarArt(5, 256,  91, 53, [29, 60], [175, 60], { X: 135, Y: 19, H: 38, S: 37 }),   // dark sedan
+                getawayCarArt(6, 256,  77, 56, [19, 39], [157, 39], { X: 112, Y: 17, H: 30, S: 30 }),   // blue sports car
+                getawayCarArt(7, 256, 101, 54, [30, 67], [176, 67], { X: 143, Y: 30, H: 36, S: 49 }),   // orange wagon
+                getawayCarArt(8, 256, 114, 60, [25, 75], [169, 75], { X: 138, Y: 34, H: 40, S: 50 }),   // cream city car
+                getawayCarArt(9, 304, 102, 64, [38, 62], [216, 62], { X: 168, Y: 28, H: 38, S: 44 }),   // red pickup
+                getawayCarArt(10, 307, 129, 64, [34, 85], [220, 85], { X: 214, Y: 42, H: 44, S: 60 }),  // blue van
+                getawayCarArt(11, 288,  73, 49, [30, 43], [208, 43], { X: 150, Y: 18, H: 30, S: 29 }),  // purple limo
+                getawayCarArt(12, 256, 150, 68, [30, 103], [162, 103], { X: 125, Y: 54, H: 50, S: 71 }), // mint bubble car
+                getawayCarArt(13, 280,  81, 53, [32, 47], [196, 47], { X: 122, Y: 24, H: 34, S: 36 }),  // red fastback
+                getawayCarArt(14, 256, 126, 65, [28, 82], [160, 82], { X: 122, Y: 39, H: 40, S: 56 }),  // green off-roader
+                getawayCarArt(15, 256,  84, 48, [32, 52], [181, 52], { X: 138, Y: 22, H: 34, S: 35 }),  // cream sedan
+                getawayCarArt(16, 256,  87, 58, [30, 52], [171, 52], { X: 118, Y: 25, H: 32, S: 38 }),  // yellow coupe
+                getawayCarArt(17, 300, 125, 69, [28, 85], [205, 85], { X: 190, Y: 37, H: 44, S: 55 }),  // blue minivan
+                getawayCarArt(18, 252,  66, 45, [36, 37], [178, 37], { X: 115, Y: 16, H: 28, S: 25 }),  // maroon coupe
+                getawayCarArt(19, 256,  97, 56, [18, 57], [167, 57], { X: 112, Y: 24, H: 34, S: 38 }),  // red hatchback
+                getawayCarArt(20, 270,  94, 54, [34, 60], [184, 60], { X: 158, Y: 23, H: 36, S: 38 }),  // blue pickup
+                getawayCarArt(21, 256,  97, 45, [35, 67], [181, 67], { X: 145, Y: 27, H: 34, S: 40 }),  // olive classic
+                getawayCarArt(22, 260,  73, 53, [34, 35], [175, 35], { X: 132, Y: 18, H: 28, S: 30 }),  // orange sports car
+                getawayCarArt(23, 260,  89, 47, [35, 59], [185, 59], { X: 148, Y: 25, H: 34, S: 39 }),  // grey estate
+                getawayCarArt(24, 280, 139, 65, [35, 97], [189, 97], { X: 168, Y: 45, H: 44, S: 64 }),  // yellow van
+                getawayCarArt(25, 256,  94, 53, [27, 58], [177, 58], { X: 120, Y: 23, H: 36, S: 38 }),  // teal hatchback
+                getawayCarArt(26, 256,  73, 47, [29, 44], [181, 44], { X: 140, Y: 17, H: 28, S: 28 }),  // dark green sedan
+                getawayCarArt(27, 256,  94, 55, [26, 61], [180, 61], { X: 145, Y: 28, H: 36, S: 41 }),  // red estate
+                getawayCarArt(28, 256,  93, 63, [17, 50], [185, 50], { X: 115, Y: 18, H: 28, S: 32 }),  // purple hot rod
+                getawayCarArt(29, 256,  88, 56, [21, 53], [174, 53], { X: 137, Y: 22, H: 34, S: 36 }),  // copper crossover
+                getawayCarArt(30, 256, 105, 53, [24, 72], [177, 72], { X: 142, Y: 33, H: 38, S: 49 }),  // yellow taxi
+                getawayCarArt(31, 256,  77, 56, [26, 43], [178, 43], { X: 115, Y: 20, H: 28, S: 31 }),  // navy coupe
             ],
         },
     },
@@ -1200,6 +1208,11 @@ var CONFIG = {
             { x: 175, y: 66 },   // front
         ],
         TYRES_IN_FRONT: true,    // tyres drawn over the body's dark arches
+        // THE DRIVER: the piggy in side view (looking ahead, at the rival) in
+        // the front window, in the BODY's pixels. Its height H with the bottom
+        // CROP cut off at the window's bottom edge S, centred at X; whatever
+        // is outside the glass (TOP, LEFT, RIGHT edges) cut off too.
+        DRIVER: { KEY: 'piggy_side', X: 120, S: 43, TOP: 14, LEFT: 96, RIGHT: 147, H: 42, CROP: 0.1 },
 
         // ONE CAR PER SLOT, its road the line through the slot's bottom edge.
         // Sized to WIDTH_FRAC of the car area's width, but never taller (ground
