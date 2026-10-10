@@ -688,6 +688,7 @@ var CONFIG = {
                 'alien_racer.webp', 'crowned_raven_champion.webp'],
         DEPTH:         4,
         PAYOUT_MULT:   1,        // coins = its lead × this (levels 1–2 are flat)
+        PREFETCH_AHEAD: 4,       // levels ahead whose rival heads load in the background (only level 1's is in the startup load)
 
         NEXT_LEVEL_MS: 900,      // (no rank panel) pause after the last win before the next level
         ENTER_MS:      400,      // a new level: the piggy cars roll back to the line in this + 200
@@ -737,7 +738,7 @@ var CONFIG = {
                 getawayCarArt(1, 256,  91, 53, [29, 60], [175, 60], { X: 135, Y: 19, H: 38 }),   // dark sedan
                 getawayCarArt(2, 207, 104, 56, [20, 65], [126, 65], { X: 100, Y: 27, H: 36 }),   // yellow city car
                 getawayCarArt(3, 256,  72, 56, [22, 34], [163, 34], { X: 110, Y: 17, H: 30 }),   // red muscle car
-                getawayCarArt(4, 256, 119, 59, [32, 78], [159, 78], { X: 113, Y: 40, H: 40 }),   // green SUV
+                getawayCarArt(4, 256, 119, 65, [29, 75], [156, 75], { X: 113, Y: 40, H: 40 }),   // green SUV
                 getawayCarArt(5, 256, 100, 58, [28, 63], [173, 63], { X: 135, Y: 27, H: 36 }),   // teal classic
                 getawayCarArt(6, 256,  77, 56, [19, 39], [157, 39], { X: 112, Y: 17, H: 30 }),   // blue sports car
                 getawayCarArt(7, 256, 101, 54, [30, 67], [176, 67], { X: 143, Y: 30, H: 36 }),   // orange wagon
@@ -961,6 +962,7 @@ var CONFIG = {
             SHAKE:      0,           // camera shake strength (0 = none) — off: it shook the whole screen, merge grid and all
             SHAKE_MS:   160,
             HOP:        12,          // px @ design the winner's hop rises
+            HOP_OTHER:  0.5,         // the other lanes' wins hop this share of HOP (the level's last win: all of it)
             HOP_MS:     380,         // up and down, at full speed (slowed with the slow motion)
             HOP_LAND:   90,          // px/s @ design the springs take landing
             DUST:       6,           // puffs at the winner's tyres
@@ -1031,13 +1033,14 @@ var CONFIG = {
         INK:         '#2b2013',
         TITLE_COLOR: '#e8590c',
         YOU_FILL:    '#ffd23f',
-        ROW_FILL:    '#f26b5b',   // opponents' rows, as the VS card's rival half (YOU_FILL as its player half)
+        ROW_FILL:    '#f26b5b',   // the active opponent's row (the rival raced, then the next), as the VS card's rival half
+        ROW_IDLE:    '#a39a90',   // every other opponent's row
         ROW_INK:     '#ffffff',   // opponents' rows: their rank and name (the player's row: INK)
         GAP_COLOR:   '#a08560',
         NEXT_COLOR:  '#6b4a2a',
         LOCKED_TINT: '#7a7266',   // racers not yet reached: their sprite as a silhouette of this colour
         UNLOCK_MS:    350,        // the next opponent's silhouette filling in with colour
-        DIM:          0.35,       // opponents' rows darkened by this (0-1): all but the rival just raced, then all but the next one
+        PASSED_ALPHA: 0.45,       // racers already passed: their rows see-through to this (0-1)
         NEXT_MS:      2500,       // the next opponent highlighted this long after the climb, before the card goes
         NEXT_RING:    '#ffffff',  // the highlighted next opponent's outline
         // Racer names, fixed per rank.

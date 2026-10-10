@@ -32,8 +32,8 @@ function assetList() {
 }
 
 // ── SHARED ART ───────────────────────────────────────────────────────────────
-// Everything the game needs: the merge grid's UI. There is no per-level
-// fetching — this one list is the whole of it.
+// Everything the game needs to start. Later rivals' heads are fetched in the
+// background as levels near (AssetManager.prefetchRivals), not listed here.
 function sharedAssets() {
     const A = assetList();
 
@@ -67,9 +67,9 @@ function sharedAssets() {
         A.image(getawayBodyKey(i + 1), c.BODY);
         A.image(getawayTyreKey(i + 1), c.TYRE);
     });
-    // The rivals — all of them, they are small and one turns up every level.
-    const V = CONFIG.VILLAIN || {};
-    (V.FILES || []).forEach((f, i) => A.image(villainKey(i + 1), (V.DIR || 'graphics/villain/') + f));
+    // THE FIRST RIVAL only. The rest come in the background once the game
+    // is running, a few levels ahead (AssetManager.prefetchRivals).
+    A.image(villainKey(villainIndexFor(1)), villainPath(villainIndexFor(1)));
     return A.list();
 }
 
@@ -84,5 +84,9 @@ function villainIndexFor(level) {
     return ((Math.max(1, Math.floor(level)) - 1) % n) + 1;
 }
 function villainKey(i) { return `villain_${i}`; }
+function villainPath(i) {
+    const V = CONFIG.VILLAIN || {};
+    return (V.DIR || 'graphics/villain/') + (V.FILES || [])[i - 1];
+}
 function getawayBodyKey(i) { return `getaway_body_${i}`; }
 function getawayTyreKey(i) { return `getaway_tyre_${i}`; }

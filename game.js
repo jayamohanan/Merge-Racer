@@ -170,6 +170,19 @@ class AssetManager {
         const top = getHighestBatteryLevel();
         for (let l = level; l < level + n && l <= top; l++) this.prefetchBattery(l);
     }
+
+    // THE RIVALS' HEADS round a level: the last one (the rank list's row
+    // below) and the next VILLAIN.PREFETCH_AHEAD (the rank list's racers
+    // ahead, and the next VS card). In the background; already loaded or in
+    // flight is skipped.
+    prefetchRivals(level) {
+        const n = (CONFIG.VILLAIN || {}).PREFETCH_AHEAD;
+        const ahead = Math.max(1, n !== undefined ? n : 4);
+        for (let l = Math.max(1, level - 1); l <= level + ahead; l++) {
+            const i = villainIndexFor(l);
+            this.ensureImage(villainKey(i), villainPath(i)).catch(() => {});
+        }
+    }
 }
 
 class GameScene extends Phaser.Scene {
@@ -872,6 +885,11 @@ class GameScene extends Phaser.Scene {
             else if (a.frame)       this.load.spritesheet(a.key, a.url, a.frame);
             else                    this.load.image(a.key, a.url);
         }
+        // A SAVE past level 1: that level's rival is needed from the start.
+        if (this._save && this._save.level > 1) {
+            const i = villainIndexFor(this._save.level);
+            this.load.image(villainKey(i), villainPath(i));
+        }
 
         // A file that 404s leaves the cache entry simply absent, and whatever
         // wanted it draws nothing — which looks exactly like art that loaded and
@@ -942,6 +960,7 @@ class GameScene extends Phaser.Scene {
         if (save) this._restorePigs(save);
         else this.spawnBatteryInGrid(0, 0, CONFIG.BATTERY_START_LEVEL);
         this.assets.prefetchAhead(this.highestBatteryLevel + 1);
+        this.assets.prefetchRivals(this.level);
         this.createButtons();
         if (save) this.updateSpawnButton();
         this.time.addEvent({
@@ -1571,6 +1590,7 @@ class GameScene extends Phaser.Scene {
     // THE NEXT LEVEL: its rival, three times, and fresh leads.
     _nextLevel() {
         this.level += 1;
+        this.assets.prefetchRivals(this.level);
         this.lanes = this._levelLanes(this.level);
         this._buildVillains(true);
         this._levelTurning = false;
@@ -2724,13 +2744,18 @@ class GameScene extends Phaser.Scene {
             c.add(body); c.body = body;
             const g = this.add.graphics();
             const rw = W - pad * 2, rh = rowH - 6 * sc, rad = Math.min(rh / 2, 14 * sc);
-            g.fillStyle(hexColor(you ? (K.YOU_FILL || '#ffd23f') : (K.ROW_FILL || '#f1e2c8')), 1)
+            g.fillStyle(hexColor(you ? (K.YOU_FILL || '#ffd23f') : (K.ROW_IDLE || '#a39a90')), 1)
                 .fillRoundedRect(-rw / 2, -rh / 2, rw, rh, rad);
+            // THE ACTIVE OPPONENT'S COLOUR (ROW_FILL) over the grey, shown
+            // only on the rival being raced, then on the next one.
+            const warm = you ? null : this.add.graphics().fillStyle(hexColor(K.ROW_FILL || '#f26b5b'), 1)
+                .fillRoundedRect(-rw / 2, -rh / 2, rw, rh, rad).setAlpha(0);
             if (you) g.lineStyle(Math.max(2, 2.5 * sc), hexColor(ink), 1).strokeRoundedRect(-rw / 2, -rh / 2, rw, rh, rad);
             const tc = you ? ink : (K.ROW_INK || '#ffffff');
             const rt = this.add.text(-rw / 2 + 16 * sc, 0, '#' + this._bigNum(rank), font(22, tc)).setOrigin(0, 0.5);
             const fig = rh * 0.86, figX = -rw / 2 + 76 * sc + fig / 2;
-            body.add([g, rt]);
+            body.add(warm ? [g, warm, rt] : [g, rt]);
+            c.warm = warm;
             if (key && this.textures.exists(key)) {
                 const im = this.add.image(figX, 0, key);
                 im.setScale(fig / Math.max(im.width, im.height));
@@ -2743,16 +2768,17 @@ class GameScene extends Phaser.Scene {
                     c.sil = sil; c.fig = im;
                 }
                 body.add(im);
+            } else if (key) {
+                // NOT HERE YET (a slow connection): a round silhouette instead.
+                body.add(this.add.graphics().fillStyle(hexColor(K.LOCKED_TINT || '#7a7266'), 1)
+                    .fillCircle(figX, 0, fig * 0.4));
             }
             body.add(this.add.text(figX + fig / 2 + 12 * sc, 0, name, font(22, tc)).setOrigin(0, 0.5));
-            // THE SHADE (DIM) darkening the row, and the RING round the
-            // next opponent while it is highlighted. Both off to begin.
+            // THE RING round the next opponent while it is highlighted. Off to begin.
             if (!you) {
-                c.shade = this.add.graphics().fillStyle(0x000000, 1)
-                    .fillRoundedRect(-rw / 2, -rh / 2, rw, rh, rad).setAlpha(0);
                 c.ring = this.add.graphics().lineStyle(Math.max(2, 3 * sc), hexColor(K.NEXT_RING || '#ffffff'), 1)
                     .strokeRoundedRect(-rw / 2, -rh / 2, rw, rh, rad).setAlpha(0);
-                body.add([c.shade, c.ring]);
+                body.add(c.ring);
             }
             c.rankText = rt;
             return c;
@@ -2778,20 +2804,27 @@ class GameScene extends Phaser.Scene {
             }
             you = row(oldR, K.YOU || 'YOU', true, 'podium_piggy');
             panel.add(you);
-            // THE RIVAL JUST RACED IN FULL: every other opponent darkened.
-            const dim = v(K.DIM, 0.35);
-            for (const o of others) if (o !== beaten) o.shade.setAlpha(dim);
+            // THE RIVAL JUST RACED IN ITS COLOUR, the rest grey; those beaten
+            // in earlier levels see-through too (PASSED_ALPHA).
+            const passed = v(K.PASSED_ALPHA, 0.45);
+            for (const o of others) if (o.rank >= oldR) o.body.setAlpha(passed);
+            if (beaten) beaten.warm.setAlpha(1);
             // UNLOCKED: once YOU passes the rival just beaten, its row fades
             // and the next opponent's silhouette fills in with colour.
             let unlocked = false;
             const unlock = () => {
                 unlocked = true;
                 const ms = v(K.UNLOCK_MS, 350);
-                if (beaten) this.tweens.add({ targets: beaten.shade, alpha: dim, duration: ms });
+                // Everyone just passed: grey and see-through.
+                for (const o of others) {
+                    if (o.rank < newR || o.rank >= oldR) continue;
+                    this.tweens.add({ targets: o.warm, alpha: 0, duration: ms });
+                    this.tweens.add({ targets: o.body, alpha: passed, duration: ms });
+                }
                 // THE NEXT OPPONENT lit up and highlighted (ring and a
                 // pulse) until the card goes (NEXT_MS).
                 if (nextUp) {
-                    this.tweens.add({ targets: nextUp.shade, alpha: 0, duration: ms });
+                    this.tweens.add({ targets: nextUp.warm, alpha: 1, duration: ms });
                     this.tweens.add({ targets: nextUp.ring, alpha: 1, duration: ms });
                     panel.nextPulse = this.tweens.add({ targets: nextUp.body, scale: 1.05, duration: 380, yoyo: true, repeat: -1,
                         ease: 'Sine.easeInOut' });
@@ -2991,7 +3024,9 @@ class GameScene extends Phaser.Scene {
         // speed along the road), long enough to carry a stretch of road with
         // it, in the lane's time (slowed with its slow motion). It lands on
         // its springs. The line takes the hit; dust at the tyres.
-        const hopTw = this.tweens.add({ targets: car, y: car.y - v(W.HOP, 12) * sc,
+        // The level's last win hops full height; the others HOP_OTHER of it.
+        const hop = v(W.HOP, 12) * (!line || line.final ? 1 : v(W.HOP_OTHER, 0.5));
+        const hopTw = this.tweens.add({ targets: car, y: car.y - hop * sc,
             duration: v(W.HOP_MS, 380) / 2, yoyo: true, ease: 'Quad.easeOut',
             onComplete: () => {
                 for (const e of car.susp.ends) e.v -= v(W.HOP_LAND, 90) * sc;
