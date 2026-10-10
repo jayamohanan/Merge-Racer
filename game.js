@@ -1507,8 +1507,9 @@ class GameScene extends Phaser.Scene {
     }
 
     // LANE i's HEIGHT at a screen x, px (up is +) — or null with no terrain.
-    // `x0`: the road's left edge, where the scroll counts from.
-    _terrainFn(i, x0) {
+    // `x0`: the road's left edge, where the scroll counts from. `room`: how
+    // far up and down it may go (_terrainRoom); each shape is held to it.
+    _terrainFn(i, x0, room) {
         const TE = (CONFIG.ROAD || {}).TERRAIN || {};
         const T = this._terrain;
         if (!T || TE.ENABLED === false) return null;
@@ -1527,8 +1528,24 @@ class GameScene extends Phaser.Scene {
             } else {
                 k = 0.5 * (1 - Math.cos(2 * Math.PI * (sh.kind === 'washboard' ? sh.n : 1) * t));
             }
-            return sh.h * k * sc;
+            const hh = sh.h * sc;
+            return (hh > 0 ? Math.min(hh, room.up) : Math.max(hh, -room.down)) * k;
         };
+    }
+
+    // THE ROOM LANE i's TERRAIN HAS in its band, px: up — the car's roof
+    // (and a bump on top) kept in the band and clear of the lead figure;
+    // down — the road's strip kept above the band's bottom.
+    _terrainRoom(i, ground, thick) {
+        const L = this.layoutConfig, B = L.partB, sc = L.platformScale;
+        const v = (x, d) => (x !== undefined ? x : d);
+        const R = CONFIG.ROAD || {}, RL = (CONFIG.RACE || {}).LEAD || {};
+        const top = B.y + (B.height - 3 * L.slotBandH) / 2 + i * L.slotBandH;
+        const car = this.cars[i], carH = (car && car.carH) || 0;
+        const pad = 4 * sc + v(R.LINE_W, 3) * sc / 2;
+        const up = Math.min(ground - carH - top, v(RL.ABOVE, 40) * sc) - v((R.BUMPS || {}).H, 6) * sc - pad;
+        const down = top + L.slotBandH - ground - thick - pad;
+        return { up: Math.max(0, up), down: Math.max(0, down) };
     }
 
     // LANE i's FINISH HAS BEGUN: no new shape from the screen's right edge
@@ -1565,6 +1582,8 @@ class GameScene extends Phaser.Scene {
         const lineW  = Math.max(1, v(R.LINE_W, 3) * sc);
         const lineC  = hexColor(R.LINE_COLOR || '#a3825c');
         const markC  = hexColor(R.MARK_COLOR || '#7e6044');
+        const fillC  = hexColor(R.FILL_COLOR || '#c9a77c');
+        const thick  = v(R.THICK, 12) * sc;
         const bumpH  = v(BU.H, 6) * sc, bumpW = Math.max(2, v(BU.W, 40) * sc);
         const step   = Math.max(1, v(R.SAMPLE, 4) * sc);
         const top    = v(C.SPIN_DEG_PER_SEC, 540) || 1;
@@ -1586,7 +1605,7 @@ class GameScene extends Phaser.Scene {
             // under both.
             // THE ROAD'S HEIGHT at a screen x (px, up is +): the bumps, each a
             // smooth rise, slid back with the marks.
-            const terr = this._terrainFn(i, x0);
+            const terr = this._terrainFn(i, x0, this._terrainRoom(i, y, thick));
             const heightAt = (x) => {
                 let hgt = terr ? terr(x) : 0;
                 for (const b of set.bumps) {
@@ -1599,6 +1618,19 @@ class GameScene extends Phaser.Scene {
                 }
                 return hgt;
             };
+
+            // THE STRIP under the line, its thickness kept over hill and dip.
+            if (thick > 0) {
+                g.fillStyle(fillC, 1);
+                g.beginPath();
+                g.moveTo(x0, y - heightAt(x0));
+                for (let x = x0 + step; x < xEnd; x += step) g.lineTo(x, y - heightAt(x));
+                g.lineTo(xEnd, y - heightAt(xEnd));
+                for (let x = xEnd; x > x0; x -= step) g.lineTo(x, y - heightAt(x) + thick);
+                g.lineTo(x0, y - heightAt(x0) + thick);
+                g.closePath();
+                g.fillPath();
+            }
 
             // THE LINE, bumps and all.
             g.lineStyle(lineW, lineC, 1);

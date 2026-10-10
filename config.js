@@ -624,6 +624,8 @@ var CONFIG = {
         LINE_COLOR:  '#a3825c',
         LINE_W:      3,          // px @ design
         MARK_COLOR:  '#7e6044',
+        THICK:       12,         // px @ design: the road strip's depth under its line (0 = just the line)
+        FILL_COLOR:  '#c9a77c',  // the strip
         SPEED:       420,        // px/s @ design the marks slide at, full speed
         PERIOD:      420,        // px @ design before the pattern of marks repeats
         MARKS:       8,          // marks in one period
