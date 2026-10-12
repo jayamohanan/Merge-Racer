@@ -29,7 +29,8 @@ mkdir -p "$OUT"
 # below, so this runs the same everywhere.
 #
 # What is LEFT OUT:
-#   NAMES   anywhere in the tree — repo and tooling folders, notes, Finder litter
+#   NAMES   anywhere in the tree — repo and tooling folders, store art (Poki
+#           thumbnails, uploaded on the dashboard), notes, Finder litter
 #   PATHS   from the project root — graphics/item (the old baked-together
 #           items) and graphics/crop are no longer loaded; the item art is
 #           graphics/piggy and graphics/st_wheel now
@@ -37,7 +38,7 @@ node - "$OUT" <<'EOF'
 const fs = require('fs'), path = require('path');
 const OUT = process.argv[2];
 const NAMES = new Set(['.git', '.github', '.gitignore', '.claude', '.DS_Store', 'build', 'build.sh',
-                       'build.command', 'dev', 'tools', 'style', 'sounds', 'untitled folder']);
+                       'build.command', 'dev', 'store', 'tools', 'style', 'sounds', 'untitled folder']);
 const PATHS = new Set(['graphics/item', 'graphics/crop']);
 const skip = (rel, name) => NAMES.has(name) || PATHS.has(rel) || name.startsWith('._') || name.endsWith('.md');
 let n = 0;
