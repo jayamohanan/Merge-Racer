@@ -1651,6 +1651,12 @@ class GameScene extends Phaser.Scene {
             }
 
             if (car && car.scene) this._suspend(car, heightAt, k, delta);
+            // THE PIGGY IN THE WINDOW only while its slot holds a piggy; the
+            // car itself carries on either way.
+            if (car && car.face) {
+                const slot = this.chargingSlots[i];
+                car.face.setVisible(!!(slot && slot.batteryData));
+            }
             if (vl && vl.scene) this._suspend(vl, heightAt, k, delta);
         });
     }
