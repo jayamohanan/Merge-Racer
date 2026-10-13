@@ -4613,6 +4613,13 @@ class GameScene extends Phaser.Scene {
             const nl = this.highestBatteryLevel - 7;
             if (nl > this.spawnButtonLevel) {
                 this.spawnButtonLevel = nl;
+                // NO STRANDED PIGGIES: once the button makes level nl, a piggy
+                // below it could never find a partner, so lift it to nl.
+                for (const bd of this.batteries) if (bd.inGrid && bd.level < nl) this._setGridLevel(bd, nl);
+                for (let i = 0; i < 3; i++) {
+                    const slot = this.chargingSlots[i];
+                    if (slot && slot.level < nl) this._setSlotLevel(i, nl);
+                }
                 this.spawnCost = nl * CONFIG.ECONOMY.SPAWN_COST_PER_LEVEL;
                 this.spawnButtonText.setText(this._bigNum(this.spawnCost));
                 const iconLvl = getBatteryIconLevel(nl);
@@ -5047,29 +5054,38 @@ class GameScene extends Phaser.Scene {
         }, 1000);
     }
 
+    _setGridLevel(bd, lv) {
+        bd.level = lv;
+        bd.levelText.setText(`PIGGY ${lv}`);
+        this.assets.dressWhenReady(bd.sprite, getBatteryIconLevel(lv));
+    }
+
+    _setSlotLevel(i, lv) {
+        const slot = this.chargingSlots[i], p = this.platforms[i];
+        slot.level = lv;
+        slot.distPerSec = getBatteryChargeValue(lv);
+        if (slot.batteryData) slot.batteryData.level = lv;
+        const sbd = slot.batteryData;
+        if (p.batterySprite && sbd && sbd.wheel) {
+            sbd.wheel.ready = false;
+            this.assets.dressSlotWhenReady(p.batterySprite, sbd.wheel, getBatteryIconLevel(lv));
+        }
+        if (p.batteryLevelText) p.batteryLevelText.setText(`PIGGY ${lv}`);
+        p.chargeRateText.setText(this._rateText(slot.distPerSec));
+    }
+
     performLevelUpAll() {
         for (const bd of this.batteries) {
             if (bd.inGrid) {
-                bd.level += 1;
-                bd.levelText.setText(`PIGGY ${bd.level}`);
-                this.assets.dressWhenReady(bd.sprite, getBatteryIconLevel(bd.level));
+                this._setGridLevel(bd, bd.level + 1);
                 if (bd.level > this.highestBatteryLevel) this.highestBatteryLevel = bd.level;
             }
         }
         for (let i = 0; i < 3; i++) {
             const slot = this.chargingSlots[i];
             if (slot) {
-                const p = this.platforms[i];
-                slot.level += 1;
-                slot.distPerSec = getBatteryChargeValue(slot.level);
-                if (slot.batteryData) slot.batteryData.level = slot.level;
-                const sbd = slot.batteryData;
-                if (p.batterySprite && sbd && sbd.wheel) {
-                    sbd.wheel.ready = false;
-                    this.assets.dressSlotWhenReady(p.batterySprite, sbd.wheel, getBatteryIconLevel(slot.level));
-                }
-                if (p.batteryLevelText) p.batteryLevelText.setText(`PIGGY ${slot.level}`);
-                p.chargeRateText.setText(this._rateText(slot.distPerSec));
+                this._setSlotLevel(i, slot.level + 1);
+                if (slot.level > this.highestBatteryLevel) this.highestBatteryLevel = slot.level;
             }
         }
         this.updateSpawnButton();
